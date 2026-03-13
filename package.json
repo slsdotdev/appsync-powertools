@@ -1,15 +1,17 @@
 {
   "name": "appsync-powertools",
   "version": "1.0.0",
-  "description": "Appsync toolchain for better developer experience",
+  "description": "Appsync powertools for better developer experience",
   "main": "turbo.json",
   "type": "module",
   "scripts": {
+    "changeset": "changeset",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "dev": "turbo run dev",
     "build": "turbo run build",
-    "prepare": "husky"
+    "prepare": "husky",
+    "release": "changeset publish"
   },
   "repository": {
     "type": "git",
@@ -38,6 +40,7 @@
     "pnpm": "use-npm"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.30.0",
     "@eslint/js": "^10.0.1",
     "@types/node": "^25.5.0",
     "eslint": "^10.0.3",
