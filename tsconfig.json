@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": true,
+    "declaration": true,
+    "declarationMap": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowSyntheticDefaultImports": true,
+    "isolatedModules": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "skipDefaultLibCheck": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "strictNullChecks": true,
+    "stripInternal": true,
+    "target": "ES2020"
+  },
+}
