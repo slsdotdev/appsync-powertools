@@ -1,7 +1,7 @@
 import { GraphQLError } from "graphql";
 
 export class TransformerValidationError extends Error {
-  constructor(errors: GraphQLError[]) {
+  constructor(errors: readonly GraphQLError[]) {
     super(`Schema validation failed.\n\n${errors.map((error) => error.toString()).join("\n\n")}`);
     this.name = "TransformerValidationError";
   }
