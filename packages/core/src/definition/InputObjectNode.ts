@@ -5,7 +5,7 @@ import {
   InputValueDefinitionNode,
   Kind,
   ObjectTypeDefinitionNode,
-} from "graphql/language";
+} from "graphql";
 import { WithDirectivesNode } from "./WithDirectivesNode.js";
 import { InputValueNode } from "./InputValueNode.js";
 import { DirectiveNode } from "./DirectiveNode.js";

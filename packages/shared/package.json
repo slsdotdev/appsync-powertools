@@ -28,6 +28,10 @@
     "../../LICENSE"
   ],
   "exports": {
+    "./definition": {
+      "default": "./dist/definition/index.js",
+      "types": "./dist/definition/index.d.ts"
+    },
     "./logger": {
       "default": "./dist/logger/index.js",
       "types": "./dist/logger/index.d.ts"
@@ -35,6 +39,10 @@
     "./errors": {
       "default": "./dist/errors/index.js",
       "types": "./dist/errors/index.d.ts"
+    },
+    "./utils": {
+      "default": "./dist/utils/index.js",
+      "types": "./dist/utils/index.d.ts"
     }
   },
   "scripts": {
@@ -45,5 +53,12 @@
   },
   "peerDependencies": {
     "graphql": ">=16"
+  },
+  "dependencies": {
+    "picocolors": "^1.1.1",
+    "picomatch": "^4.0.3"
+  },
+  "devDependencies": {
+    "@types/picomatch": "^4.0.2"
   }
 }

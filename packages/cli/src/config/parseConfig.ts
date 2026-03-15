@@ -1,9 +1,10 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { stripUndef } from "@gqlbase/shared/utils";
 import { Config } from "./defineConfig.js";
 
 export const DEFAULT_CONFIG_FILES = [
-  "gqlbase.config.ts",
+  // "gqlbase.config.ts",
   "gqlbase.config.js",
   "gqlbase.config.mjs",
   "gqlbase.config.cjs",
@@ -19,7 +20,7 @@ export const DEFAULT_CONFIG = Object.freeze<Config>({
 export interface ConfigOverrides extends Partial<
   Pick<Config, "schema" | "output" | "verbose" | "watch">
 > {
-  configFile?: string;
+  config?: string;
 }
 
 const resolveConfigFilePath = (filePath?: string): string | null => {
@@ -58,7 +59,7 @@ export const loadConfigFile = async (filePath?: string): Promise<Config | null> 
 };
 
 export async function parseConfig(overrides: Partial<ConfigOverrides> = {}): Promise<Config> {
-  const configFromFile = await loadConfigFile(overrides.configFile);
+  const configFromFile = await loadConfigFile(overrides.config);
 
   if (!configFromFile) {
     throw new Error(
@@ -69,6 +70,6 @@ export async function parseConfig(overrides: Partial<ConfigOverrides> = {}): Pro
   return {
     ...DEFAULT_CONFIG,
     ...configFromFile,
-    ...overrides,
+    ...stripUndef(overrides),
   };
 }

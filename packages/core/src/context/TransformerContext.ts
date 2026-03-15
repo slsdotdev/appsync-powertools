@@ -2,14 +2,20 @@ import { DocumentNode } from "../definition/DocumentNode.js";
 import { ITransformerPlugin } from "../plugins/ITransformerPlugin.js";
 import { ITransformerContext } from "./ITransformerContext.js";
 
+interface TransformerContextOptions {
+  outputDirectory?: string;
+}
+
 export class TransformerContext implements ITransformerContext {
   readonly plugins: ITransformerPlugin[] = [];
   readonly base: DocumentNode;
+  readonly outputDirectory: string;
 
   private _workInProgress: DocumentNode | null = null;
 
-  constructor() {
+  constructor(options: TransformerContextOptions = {}) {
     this.base = DocumentNode.create();
+    this.outputDirectory = options.outputDirectory || "generated";
   }
 
   get document() {

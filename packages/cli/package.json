@@ -48,6 +48,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "cac": "^7.0.0"
+    "cac": "^7.0.0",
+    "@gqlbase/core": "*",
+    "@gqlbase/shared": "*"
   }
 }

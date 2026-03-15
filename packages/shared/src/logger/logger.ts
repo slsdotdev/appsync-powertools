@@ -1,3 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import pc from "picocolors";
+import util from "node:util";
+
 export type LogLevel = "silent" | "debug" | "info" | "warn" | "error";
 
 export class Logger {
@@ -9,31 +13,44 @@ export class Logger {
     this._level = level;
   }
 
-  private _log(message: string, ...args: unknown[]): void {
-    console.log(`[${this._scope}] ${message}`, ...args);
+  private _formatMessage(level: string, message: string, ...args: any[]): string {
+    const prefix = `gqlbase ${level} ${this._scope}`;
+
+    const formattedArgs = util
+      .format("", message, ...args)
+      .split("\n")
+      .join("\n" + prefix + " ");
+
+    return `${prefix}${formattedArgs}`;
   }
 
-  debug(message: string, ...args: unknown[]): void {
+  debug(message: string, ...args: any[]): void {
     if (this._level === "debug") {
-      this._log(message, ...args);
+      console.debug(this._formatMessage(pc.cyan("debug"), message, ...args));
     }
   }
 
-  info(message: string, ...args: unknown[]): void {
+  info(message: string, ...args: any[]): void {
     if (["debug", "info"].includes(this._level)) {
-      this._log(message, ...args);
+      console.debug(this._formatMessage(pc.blue("info"), message, ...args));
     }
   }
 
-  warn(message: string, ...args: unknown[]): void {
+  success(message: string, ...args: any[]): void {
+    if (["debug", "info"].includes(this._level)) {
+      console.debug(this._formatMessage(pc.green("success"), message, ...args));
+    }
+  }
+
+  warn(message: string, ...args: any[]): void {
     if (["debug", "info", "warn"].includes(this._level)) {
-      this._log(message, ...args);
+      console.warn(this._formatMessage(pc.yellow("warn"), message, ...args));
     }
   }
 
-  error(message: string, ...args: unknown[]): void {
+  error(message: string, ...args: any[]): void {
     if (["debug", "info", "warn", "error"].includes(this._level)) {
-      this._log(message, ...args);
+      console.error(this._formatMessage(pc.red("error"), message, ...args));
     }
   }
 
