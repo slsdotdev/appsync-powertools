@@ -192,7 +192,7 @@ export class DocumentNode {
     for (const document of documents) {
       for (const node of document.definitions.values()) {
         if (mergedDocument.hasNode(node.name)) {
-          throw new Error(`Node with name ${node.name} already exists.`);
+          throw new InvalidDefinitionError(`Node with name ${node.name} already exists.`);
         }
 
         mergedDocument.addNode(node);

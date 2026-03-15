@@ -6,3 +6,4 @@ export {
   ModelOperation,
   ModelDirective,
 } from "./ModelPlugin.js";
+export { NodeInterfacePlugin, nodeInterfacePlugin } from "./NodeInterfacePlugin.js";
