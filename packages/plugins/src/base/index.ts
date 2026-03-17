@@ -1,9 +1,22 @@
 export {
-  modelPlugin,
-  isModel,
   ModelPlugin,
   type ModelPluginOptions,
-  ModelOperation,
   ModelDirective,
+  ModelOperation,
+  modelPlugin,
+  isModel,
 } from "./ModelPlugin.js";
-export { NodeInterfacePlugin, nodeInterfacePlugin } from "./NodeInterfacePlugin.js";
+export {
+  UtilitiesPlugin,
+  UtilityDirective,
+  utilsPlugin,
+  isReadOnly,
+  isClientOnly,
+  isCreateOnly,
+  isFilterOnly,
+  isServerOnly,
+  isUpdateOnly,
+  isWriteOnly,
+} from "./UtilitiesPlugin.js";
+
+export { basePreset } from "./basePreset.js";

@@ -25,17 +25,19 @@ describe("NodeInterfacePlugin", () => {
   describe("the `before` hook", () => {
     it("it throws when user declares invalid `Node` type", () => {
       context.finishWork();
+      context.startWork(
+        DocumentNode.fromSource(/* GraphQL */ `
+          type Node {
+            id: ID!
+          }
+        `)
+      );
 
-      const schema = DocumentNode.fromSource(/* GraphQL */ `
-        type Node {
-          id: ID!
-        }
-      `);
-
-      expect(() => context.startWork(schema)).toThrow();
+      expect(() => plugin.before()).toThrow();
     });
 
     it("added interface definition", () => {
+      plugin.before();
       const iface = context.document.getNode("Node") as InterfaceNode;
 
       expect(iface).toBeInstanceOf(InterfaceNode);

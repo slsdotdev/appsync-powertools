@@ -10,11 +10,13 @@ import {
   NonNullTypeNode,
   ObjectNode,
 } from "@gqlbase/core/definition";
-import { TransformerPluginExecutionError } from "@gqlbase/shared/errors";
+import { InvalidDefinitionError, TransformerPluginExecutionError } from "@gqlbase/shared/errors";
+import { isModel } from "../base/index.js";
 
 /**
  * Adds a `Node` interface with an `id: ID!` field to the schema and ensures that all types that implement the `Node` interface also have the `id: ID!` field.
  *
+ * @dependency ModelPlugin
  */
 
 export class NodeInterfacePlugin implements ITransformerPlugin {
@@ -26,16 +28,12 @@ export class NodeInterfacePlugin implements ITransformerPlugin {
   }
 
   public init(): void {
-    this.context.base.addNode(
-      InterfaceNode.create("Node", [
-        FieldNode.create("id", NonNullTypeNode.create(NamedTypeNode.create("ID"))),
-      ])
-    );
+    // No initialization needed
   }
 
   match(definition: DefinitionNode): boolean {
     if (definition instanceof ObjectNode) {
-      if (definition.hasInterface("Node") || definition.hasDirective("model")) {
+      if (definition.hasInterface("Node") || isModel(definition)) {
         return true;
       }
     }
@@ -44,6 +42,21 @@ export class NodeInterfacePlugin implements ITransformerPlugin {
   }
 
   before(): void {
+    let node = this.context.document.getNode("Node");
+
+    if (node) {
+      if (!(node instanceof InterfaceNode)) {
+        throw new InvalidDefinitionError("Node type must be an interface");
+      }
+    } else {
+      node = InterfaceNode.create("Node", []);
+      this.context.document.addNode(node);
+    }
+
+    if (!node.hasField("id")) {
+      node.addField(FieldNode.create("id", NonNullTypeNode.create(NamedTypeNode.create("ID"))));
+    }
+
     const queryNode = this.context.document.getQueryNode();
 
     if (!queryNode.hasField("node")) {
@@ -69,7 +82,7 @@ export class NodeInterfacePlugin implements ITransformerPlugin {
     }
 
     // In definition has directive `@model` it should also implement `Node` interface
-    if (definition.hasDirective("model")) {
+    if (isModel(definition) && !definition.hasInterface("Node")) {
       definition.addInterface(nodeInterface.name);
     }
 
