@@ -1,12 +1,16 @@
 import { ITransformerContext } from "../context/ITransformerContext.js";
 import { DirectiveDefinitionNode } from "../definition/DirectiveDefinitionNode.js";
 import { DefinitionNode } from "../definition/DocumentNode.js";
+import { InputValueNode } from "../definition/InputValueNode.js";
+import { ScalarNode } from "../definition/ScalarNode.js";
+import { NonNullTypeNode } from "../definition/TypeNode.js";
 import { WithDirectivesNode } from "../definition/WithDirectivesNode.js";
 import { createPluginFactory } from "./createPluginFactory.js";
 import { ITransformerPlugin } from "./ITransformerPlugin.js";
 
 export const InternalDirective = Object.freeze({
   INTERNAL: "gqlbase_internal",
+  TYPE_HINT: "gqlbase_typehint",
 });
 
 /**
@@ -18,9 +22,14 @@ export const InternalDirective = Object.freeze({
  *
  * @example
  * ```graphql
+ *
+ * scalar DateTime \@gqlbase_typehint(type: "string")
+ *
  * type ConfigType \@gqlbase_internal {
  *   id: ID!
  *   name: String!
+ *   createdAt: DateTime!
+ *   updatedAt: DateTime!
  * }
  * ```
  */
@@ -34,27 +43,43 @@ export class InternalUtilsPlugin implements ITransformerPlugin {
   }
 
   public init() {
-    this.context.base.addNode(
-      DirectiveDefinitionNode.create(InternalDirective.INTERNAL, [
-        "ARGUMENT_DEFINITION",
-        "ENUM",
-        "ENUM_VALUE",
-        "FIELD_DEFINITION",
-        "INPUT_FIELD_DEFINITION",
-        "INTERFACE",
-        "OBJECT",
-        "SCALAR",
-        "UNION",
-      ])
-    );
+    this.context.base
+      .addNode(
+        DirectiveDefinitionNode.create(InternalDirective.INTERNAL, [
+          "ARGUMENT_DEFINITION",
+          "ENUM",
+          "ENUM_VALUE",
+          "FIELD_DEFINITION",
+          "INPUT_FIELD_DEFINITION",
+          "INTERFACE",
+          "OBJECT",
+          "SCALAR",
+          "UNION",
+        ])
+      )
+      .addNode(
+        DirectiveDefinitionNode.create(
+          InternalDirective.TYPE_HINT,
+          ["SCALAR"],
+          InputValueNode.create("type", NonNullTypeNode.create("String"))
+        )
+      );
   }
 
-  public match() {
-    return false;
+  public match(node: DefinitionNode): boolean {
+    return node instanceof ScalarNode;
+  }
+
+  public cleanup(definition: ScalarNode): void {
+    if (definition.hasDirective(InternalDirective.TYPE_HINT)) {
+      definition.removeDirective(InternalDirective.TYPE_HINT);
+    }
   }
 
   public after() {
-    this.context.base.removeNode(InternalDirective.INTERNAL);
+    this.context.document
+      .removeNode(InternalDirective.INTERNAL)
+      .removeNode(InternalDirective.TYPE_HINT);
   }
 }
 
@@ -72,4 +97,18 @@ export const isInternal = (node: DefinitionNode): boolean => {
   }
 
   return false;
+};
+
+export const getTypeHint = (node: ScalarNode): string => {
+  const directive = node.getDirective(InternalDirective.TYPE_HINT);
+
+  if (directive) {
+    const typeArg = directive.getArgument("type");
+
+    if (typeArg && typeArg.value.kind === "StringValue") {
+      return typeArg.value.value;
+    }
+  }
+
+  return "string";
 };

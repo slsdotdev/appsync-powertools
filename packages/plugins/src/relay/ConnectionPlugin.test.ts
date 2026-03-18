@@ -5,7 +5,6 @@ import {
   DocumentNode,
   EnumNode,
   FieldNode,
-  InputObjectNode,
   ObjectNode,
 } from "@gqlbase/core/definition";
 import { ConnectionPlugin } from "./ConnectionPlugin.js";
@@ -54,24 +53,23 @@ describe("ConnectionPlugin", () => {
     expect(context.document.getNode("hasMany")).toBeInstanceOf(DirectiveDefinitionNode);
   });
 
-  describe("on run `before` hook", () => {
-    beforeEach(() => plugin.before());
+  // describe("on run `before` hook", () => {
+  //   beforeEach(() => plugin.before());
 
-    it("adds scalars filter types", () => {
-      expect(context.document.getNode("StringFilterInput")).toBeInstanceOf(InputObjectNode);
-      expect(context.document.getNode("IntFilterInput")).toBeInstanceOf(InputObjectNode);
-      expect(context.document.getNode("FloatFilterInput")).toBeInstanceOf(InputObjectNode);
-      expect(context.document.getNode("BooleanFilterInput")).toBeInstanceOf(InputObjectNode);
-      expect(context.document.getNode("IDFilterInput")).toBeInstanceOf(InputObjectNode);
-      expect(context.document.getNode("SizeFilterInput")).toBeInstanceOf(InputObjectNode);
-      expect(context.document.getNode("ListFilterInput")).toBeInstanceOf(InputObjectNode);
-      expect(context.document.getNode("SortDirection")).toBeInstanceOf(EnumNode);
-    });
-  });
+  //   it("adds scalars filter types", () => {
+  //     expect(context.document.getNode("StringFilterInput")).toBeInstanceOf(InputObjectNode);
+  //     expect(context.document.getNode("IntFilterInput")).toBeInstanceOf(InputObjectNode);
+  //     expect(context.document.getNode("FloatFilterInput")).toBeInstanceOf(InputObjectNode);
+  //     expect(context.document.getNode("BooleanFilterInput")).toBeInstanceOf(InputObjectNode);
+  //     expect(context.document.getNode("IDFilterInput")).toBeInstanceOf(InputObjectNode);
+  //     expect(context.document.getNode("SizeFilterInput")).toBeInstanceOf(InputObjectNode);
+  //     expect(context.document.getNode("ListFilterInput")).toBeInstanceOf(InputObjectNode);
+  //     expect(context.document.getNode("SortDirection")).toBeInstanceOf(EnumNode);
+  //   });
+  // });
 
   describe("on normalize node", () => {
     beforeEach(() => {
-      plugin.before();
       plugin.normalize(context.document.getQueryNode());
       plugin.normalize(context.document.getNode("Todo") as ObjectNode);
     });
@@ -88,7 +86,6 @@ describe("ConnectionPlugin", () => {
 
   describe("on execute object node", () => {
     beforeEach(() => {
-      plugin.before();
       plugin.execute(context.document.getNode("Query") as ObjectNode);
       plugin.execute(context.document.getNode("Todo") as ObjectNode);
     });
@@ -111,36 +108,6 @@ describe("ConnectionPlugin", () => {
       expect(resourcesField?.type.getTypeName()).toBe("ResourceConnection");
       expect(resourcesField?.hasArgument("first")).toBe(true);
       expect(resourcesField?.hasArgument("after")).toBe(true);
-    });
-  });
-
-  describe("on cleanup node", () => {
-    beforeEach(() => {
-      plugin.before();
-      plugin.cleanup(context.document.getNode("Query") as ObjectNode);
-      plugin.cleanup(context.document.getNode("Todo") as ObjectNode);
-    });
-
-    it("removes connection directives from fields", () => {
-      const queryNode = context.document.getNode("Query") as ObjectNode;
-      const todoNode = context.document.getNode("Todo") as ObjectNode;
-
-      expect(queryNode.getField("me")?.hasDirective("hasOne")).toBeFalsy();
-      expect(queryNode.getField("todos")?.hasDirective("hasMany")).toBeFalsy();
-      expect(todoNode.getField("resources")?.hasDirective("hasMany")).toBeFalsy();
-    });
-  });
-
-  describe("on run `after` hook", () => {
-    beforeEach(() => {
-      plugin.after();
-    });
-
-    it("removes connection directive definitions", () => {
-      expect(context.document.getNode("ConnectionRelationType")).toBeUndefined();
-      expect(context.document.getNode("SortKeyInput")).toBeUndefined();
-      expect(context.document.getNode("edges")).toBeUndefined();
-      expect(context.document.getNode("node")).toBeUndefined();
     });
   });
 
@@ -171,7 +138,6 @@ describe("ConnectionPlugin", () => {
     beforeEach(() => {
       context.finishWork();
       context.startWork(DocumentNode.fromSource(schema));
-      plugin.before();
       plugin.normalize(context.document.getQueryNode());
       plugin.execute(context.document.getQueryNode());
     });

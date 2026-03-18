@@ -8,6 +8,7 @@ import {
   FieldNode,
   InputObjectNode,
   InputValueNode,
+  InterfaceNode,
   ListTypeNode,
   NamedTypeNode,
   NonNullTypeNode,
@@ -17,22 +18,34 @@ import {
 import { createPluginFactory, InternalDirective } from "@gqlbase/core/plugins";
 import { TransformerPluginExecutionError } from "@gqlbase/shared/errors";
 import { camelCase, pascalCase, pluralize } from "@gqlbase/shared/format";
+import { isClientOnly, isReadOnly, isServerOnly, isWriteOnly } from "./UtilitiesPlugin.js";
+import { isBuildInScalar } from "@gqlbase/shared/definition";
+import { isRelationField } from "./RelationsPlugin.js";
 
 export const ModelDirective = {
   MODEL: "model",
 } as const;
 
 export const ModelOperation = {
+  // Shorthand for read operations (get, list)
+  READ: "read",
+
+  // Shorthand for write operations (create, update, delete)
+  WRITE: "write",
+
+  // Query operations
   GET: "get",
   LIST: "list",
-  SYNC: "sync",
-  SUBSCRIBE: "subscribe",
+
+  // Mutation operations
   CREATE: "create",
   UPDATE: "update",
   UPSERT: "upsert",
   DELETE: "delete",
-  READ: "read",
-  WRITE: "write",
+
+  // TBD
+  // SYNC: "sync",
+  // SUBSCRIBE: "subscribe",
 } as const;
 
 type OperationType = (typeof ModelOperation)[keyof typeof ModelOperation];
@@ -42,6 +55,18 @@ export const DEFAULT_WRITE_OPERATIONS: OperationType[] = ["create", "update", "d
 
 export const isModel = (definition: DefinitionNode): definition is ObjectNode => {
   return definition instanceof ObjectNode && definition.hasDirective(ModelDirective.MODEL);
+};
+
+export const shouldSkipFieldFromMutationInput = (field: FieldNode): boolean => {
+  return isReadOnly(field) || isServerOnly(field) || isClientOnly(field) || isRelationField(field);
+};
+
+export const shouldSkipFieldFromFilterInput = (field: FieldNode): boolean => {
+  return isWriteOnly(field) || isServerOnly(field) || isClientOnly(field) || isRelationField(field);
+};
+
+export const shouldSkipFieldFromSortInput = (field: FieldNode): boolean => {
+  return isServerOnly(field) || isClientOnly(field);
 };
 
 export interface ModelPluginOptions {
@@ -61,8 +86,6 @@ export class ModelPlugin implements ITransformerPlugin {
 
     this._defaultOperations = this._expandOperations(options.operations);
   }
-
-  // #region Operations
 
   private _expandOperations(operations: OperationType[]) {
     const expandedOperations = new Set<OperationType>();
@@ -99,12 +122,233 @@ export class ModelPlugin implements ITransformerPlugin {
     return this._defaultOperations;
   }
 
-  private _createGetQuery(model: ObjectNode) {
+  // #region Filter Inputs
+
+  private _createSizeFilterInput() {
+    const input = InputObjectNode.create("SizeFilterInput", [
+      InputValueNode.create("ne", NamedTypeNode.create("Int")),
+      InputValueNode.create("eq", NamedTypeNode.create("Int")),
+      InputValueNode.create("le", NamedTypeNode.create("Int")),
+      InputValueNode.create("lt", NamedTypeNode.create("Int")),
+      InputValueNode.create("ge", NamedTypeNode.create("Int")),
+      InputValueNode.create("gt", NamedTypeNode.create("Int")),
+      InputValueNode.create("between", ListTypeNode.create(NonNullTypeNode.create("Int"))),
+    ]);
+
+    return input;
+  }
+
+  private _createSortDirection() {
+    const enumNode = EnumNode.create("SortDirection", ["ASC", "DESC"]);
+    return enumNode;
+  }
+
+  private _createStringLikeFilterInput(name: string, typeName: string) {
+    const input = InputObjectNode.create(name, [
+      InputValueNode.create("ne", NamedTypeNode.create(typeName)),
+      InputValueNode.create("eq", NamedTypeNode.create(typeName)),
+      InputValueNode.create("le", NamedTypeNode.create(typeName)),
+      InputValueNode.create("lt", NamedTypeNode.create(typeName)),
+      InputValueNode.create("ge", NamedTypeNode.create(typeName)),
+      InputValueNode.create("gt", NamedTypeNode.create(typeName)),
+      InputValueNode.create("in", ListTypeNode.create(NonNullTypeNode.create(typeName))),
+      InputValueNode.create("contains", NamedTypeNode.create(typeName)),
+      InputValueNode.create("notContains", NamedTypeNode.create(typeName)),
+      InputValueNode.create("between", ListTypeNode.create(NonNullTypeNode.create(typeName))),
+      InputValueNode.create("beginsWith", NamedTypeNode.create(typeName)),
+      InputValueNode.create("exists", NamedTypeNode.create("Boolean")),
+      InputValueNode.create("size", NamedTypeNode.create("SizeFilterInput")),
+    ]);
+
+    return input;
+  }
+
+  private _createNumberLikeFilterInput(name: string, typeName: string) {
+    const input = InputObjectNode.create(name, [
+      InputValueNode.create("ne", NamedTypeNode.create(typeName)),
+      InputValueNode.create("eq", NamedTypeNode.create(typeName)),
+      InputValueNode.create("le", NamedTypeNode.create(typeName)),
+      InputValueNode.create("lt", NamedTypeNode.create(typeName)),
+      InputValueNode.create("ge", NamedTypeNode.create(typeName)),
+      InputValueNode.create("gt", NamedTypeNode.create(typeName)),
+      InputValueNode.create("in", ListTypeNode.create(NonNullTypeNode.create(typeName))),
+      InputValueNode.create("between", ListTypeNode.create(NonNullTypeNode.create(typeName))),
+      InputValueNode.create("exists", NamedTypeNode.create("Boolean")),
+    ]);
+
+    return input;
+  }
+
+  private _createBooleanLikeFilterInput(name: string, typeName: string) {
+    const input = InputObjectNode.create(name, [
+      InputValueNode.create("ne", NamedTypeNode.create(typeName)),
+      InputValueNode.create("eq", NamedTypeNode.create(typeName)),
+      InputValueNode.create("exists", NamedTypeNode.create("Boolean")),
+    ]);
+
+    return input;
+  }
+
+  private _createIDLikeFilterInput(name: string, typeName: string) {
+    const input = InputObjectNode.create(name, [
+      InputValueNode.create("ne", NamedTypeNode.create(typeName)),
+      InputValueNode.create("eq", NamedTypeNode.create(typeName)),
+      InputValueNode.create("in", ListTypeNode.create(NonNullTypeNode.create(typeName))),
+      InputValueNode.create("exists", NamedTypeNode.create("Boolean")),
+    ]);
+
+    return input;
+  }
+
+  private _createListLikeFilterInput(name: string, typeName: string) {
+    const input = InputObjectNode.create(typeName, [
+      InputValueNode.create("contains", NamedTypeNode.create(name)),
+      InputValueNode.create("notContains", NamedTypeNode.create(name)),
+      InputValueNode.create("size", NamedTypeNode.create("SizeFilterInput")),
+    ]);
+
+    return input;
+  }
+
+  private _createEnumLikeFilterInput(name: string, typeName: string) {
+    const input = InputObjectNode.create(name, [
+      InputValueNode.create("eq", NamedTypeNode.create(typeName)),
+      InputValueNode.create("ne", NamedTypeNode.create(typeName)),
+      InputValueNode.create("in", ListTypeNode.create(NonNullTypeNode.create(typeName))),
+      InputValueNode.create("exists", NamedTypeNode.create("Boolean")),
+    ]);
+
+    return input;
+  }
+
+  private _createFilterInput(target: ObjectNode | InterfaceNode): InputObjectNode {
+    const filterInputName = pascalCase(target.name, "filter", "input");
+    let filterInput = this.context.document.getNode(filterInputName);
+
+    if (filterInput && !(filterInput instanceof InputObjectNode)) {
+      throw new TransformerPluginExecutionError(
+        this.name,
+        `Type ${filterInputName} is not an input type`
+      );
+    }
+
+    if (!filterInput) {
+      filterInput = InputObjectNode.create(filterInputName);
+
+      for (const field of target.fields ?? []) {
+        if (shouldSkipFieldFromFilterInput(field)) {
+          continue;
+        }
+
+        const typeName = field.type.getTypeName();
+        const inputName = pascalCase(typeName, "filter", "input");
+
+        if (isBuildInScalar(typeName)) {
+          filterInput.addField(InputValueNode.create(field.name, NamedTypeNode.create(inputName)));
+          continue;
+        }
+
+        const typeDef = this.context.document.getNodeOrThrow(typeName);
+
+        if (field.type instanceof ListTypeNode && typeDef instanceof ScalarNode) {
+          const listFilterInputName = pascalCase(typeDef.name, "list", "filter", "input");
+
+          if (!this.context.document.hasNode(listFilterInputName)) {
+            this._createListLikeFilterInput(typeDef.name, typeName);
+            this.context.document.addNode(filterInput);
+          }
+
+          filterInput.addField(
+            InputValueNode.create(field.name, NamedTypeNode.create(listFilterInputName))
+          );
+
+          continue;
+        }
+
+        if (typeDef instanceof EnumNode) {
+          if (!this.context.document.hasNode(inputName)) {
+            this.context.document.addNode(this._createEnumLikeFilterInput(inputName, typeDef.name));
+          }
+
+          filterInput.addField(InputValueNode.create(field.name, NamedTypeNode.create(inputName)));
+        }
+
+        // TODO: handle custom scalars filter inputs based on @gqlbase_typehint directive
+        // TODO: handle nested objects filtering
+      }
+
+      filterInput.addField(InputValueNode.create("and", ListTypeNode.create(filterInputName)));
+      filterInput.addField(InputValueNode.create("or", ListTypeNode.create(filterInputName)));
+      filterInput.addField(InputValueNode.create("not", NamedTypeNode.create(filterInputName)));
+
+      this.context.document.addNode(filterInput);
+    }
+
+    return filterInput;
+  }
+
+  private _createMutationInput(
+    model: ObjectNode,
+    inputName: string,
+    requiredFields: string[] = []
+  ) {
+    const input = InputObjectNode.create(inputName);
+
+    for (const field of model.fields ?? []) {
+      if (shouldSkipFieldFromMutationInput(field)) {
+        continue;
+      }
+
+      const fieldTypeName = field.type.getTypeName();
+
+      if (requiredFields.includes(field.name)) {
+        input.addField(InputValueNode.create(field.name, NonNullTypeNode.create(fieldTypeName)));
+        continue;
+      }
+
+      // Buildin scalars
+      if (isBuildInScalar(fieldTypeName)) {
+        input.addField(InputValueNode.create(field.name, NamedTypeNode.create(fieldTypeName)));
+        continue;
+      }
+
+      const typeDef = this.context.document.getNode(fieldTypeName);
+
+      if (!typeDef) {
+        throw new TransformerPluginExecutionError(this.name, `Unknown type ${fieldTypeName}`);
+      }
+
+      if (typeDef instanceof ScalarNode || typeDef instanceof EnumNode) {
+        input.addField(InputValueNode.create(field.name, NamedTypeNode.create(fieldTypeName)));
+        continue;
+      }
+
+      if (typeDef instanceof ObjectNode) {
+        if (typeDef.hasDirective("model")) {
+          continue;
+        }
+
+        const inputName = pascalCase(fieldTypeName, "input");
+
+        if (!this.context.document.hasNode(inputName)) {
+          this._createMutationInput(typeDef, inputName);
+        }
+
+        input.addField(InputValueNode.create(field.name, NamedTypeNode.create(inputName)));
+      }
+    }
+
+    this.context.document.addNode(input);
+  }
+
+  // #endregion Filter Inputs
+
+  // #region Operations
+
+  private _createGetQueryField(model: ObjectNode) {
     const fieldName = camelCase("get", model.name);
     const queryNode = this.context.document.getQueryNode();
 
-    // We allow users to implement custom definition for fields.
-    // So, if the field already exists, we skip creating it.
     if (!queryNode.hasField(fieldName)) {
       const field = FieldNode.create(
         fieldName,
@@ -117,111 +361,35 @@ export class ModelPlugin implements ITransformerPlugin {
     }
   }
 
-  private _createListQuery(model: ObjectNode) {
+  /**
+   * TODO: Handle sort input
+   */
+  private _createListQueryField(model: ObjectNode) {
     const fieldName = camelCase("list", pluralize(model.name));
+    const filterInputName = pascalCase(model.name, "filter", "input");
     const queryNode = this.context.document.getQueryNode();
 
-    if (!queryNode.hasField(fieldName)) {
-      const field = FieldNode.create(fieldName, NamedTypeNode.create(model.name), null, [
+    if (!this.context.document.hasNode(filterInputName)) {
+      this._createFilterInput(model);
+    }
+
+    let field = queryNode.getField(fieldName);
+
+    if (!field) {
+      field = FieldNode.create(fieldName, NamedTypeNode.create(model.name), null, [
         DirectiveNode.create("hasMany"),
       ]);
 
       queryNode.addField(field);
     }
-  }
 
-  private _shouldSkipFieldFromMutationInput(field: FieldNode) {
-    return (
-      field.hasDirective("readOnly") ||
-      field.hasDirective("serverOnly") ||
-      field.hasDirective("clientOnly") ||
-      field.hasDirective("hasOne") ||
-      field.hasDirective("hasMany")
-    );
-  }
-
-  private _isBuildInScalarType(typeName: string) {
-    return ["ID", "String", "Int", "Float", "Boolean"].includes(typeName);
-  }
-
-  /**
-   * For each field in the model
-   * 1. If has `@readOnly` or connection directives - skip
-   * 2. If scalar or enum - add to input;
-   * 3. If union - skip;
-   * 4. If object or interface - check definition;
-   *    4.1 If `@model` - skip;
-   *    4.2 If implements `Node` interface - skip
-   *    4.3 If fields are `@readOnly` - skip;
-   */
-
-  private _createMutationInput(
-    model: ObjectNode,
-    inputName: string,
-    requiredFields: string[] = []
-  ) {
-    const input = InputObjectNode.create(inputName);
-
-    if (inputName.startsWith("Delete")) {
-      input.addField(
-        InputValueNode.create("id", NonNullTypeNode.create(NamedTypeNode.create("ID")))
-      );
-    } else {
-      for (const field of model.fields ?? []) {
-        if (this._shouldSkipFieldFromMutationInput(field)) {
-          continue;
-        }
-
-        const fieldTypeName = field.type.getTypeName();
-
-        if (requiredFields.includes(field.name)) {
-          input.addField(InputValueNode.create(field.name, NonNullTypeNode.create(fieldTypeName)));
-          continue;
-        }
-
-        // Buildin scalars
-        if (this._isBuildInScalarType(fieldTypeName)) {
-          input.addField(InputValueNode.create(field.name, NamedTypeNode.create(fieldTypeName)));
-          continue;
-        }
-
-        const typeDef = this.context.document.getNode(fieldTypeName);
-
-        if (!typeDef) {
-          throw new TransformerPluginExecutionError(this.name, `Unknown type ${fieldTypeName}`);
-        }
-
-        if (typeDef instanceof ScalarNode || typeDef instanceof EnumNode) {
-          input.addField(InputValueNode.create(field.name, NamedTypeNode.create(fieldTypeName)));
-          continue;
-        }
-
-        if (typeDef instanceof ObjectNode) {
-          if (
-            typeDef.hasDirective("model") ||
-            typeDef.hasDirective("readOnly") ||
-            typeDef.hasDirective("serverOnly") ||
-            typeDef.hasDirective("clientOnly") ||
-            typeDef.hasInterface("Node")
-          ) {
-            continue;
-          }
-
-          const inputName = pascalCase(fieldTypeName, "input");
-
-          if (!this.context.document.hasNode(inputName)) {
-            this._createMutationInput(typeDef, inputName);
-          }
-
-          input.addField(InputValueNode.create(field.name, NamedTypeNode.create(inputName)));
-        }
-      }
+    if (!field.hasArgument("filter")) {
+      field.addArgument(InputValueNode.create("filter", NamedTypeNode.create(filterInputName)));
     }
-
-    this.context.document.addNode(input);
   }
 
-  private _createDeleteMutationField(model: ObjectNode, fieldName: string) {
+  private _createDeleteMutationField(model: ObjectNode) {
+    const fieldName = camelCase("delete", model.name);
     const mutationNode = this.context.document.getMutationNode();
 
     if (!mutationNode.hasField(fieldName)) {
@@ -233,16 +401,13 @@ export class ModelPlugin implements ITransformerPlugin {
     }
   }
 
-  private _createMutationField(
-    model: ObjectNode,
-    fieldName: string,
-    inputName: string,
-    requiredFields?: string[]
-  ) {
+  private _createMutationField(model: ObjectNode, verb: "create" | "update" | "upsert") {
+    const fieldName = camelCase(verb, model.name);
+    const inputName = pascalCase(verb, model.name, "input");
     const mutationNode = this.context.document.getMutationNode();
 
     if (!this.context.document.getNode(inputName)) {
-      this._createMutationInput(model, inputName, requiredFields);
+      this._createMutationInput(model, inputName, verb === "update" ? ["id"] : []);
     }
 
     if (!mutationNode.hasField(fieldName)) {
@@ -251,19 +416,6 @@ export class ModelPlugin implements ITransformerPlugin {
       ]);
 
       mutationNode.addField(field);
-    }
-  }
-
-  private _createMutation(model: ObjectNode, verb: OperationType) {
-    const fieldName = camelCase(verb, model.name);
-    const inputName = pascalCase(verb, model.name, "input");
-
-    if (verb === "delete") {
-      this._createDeleteMutationField(model, fieldName);
-    } else if (verb === "update") {
-      this._createMutationField(model, fieldName, inputName, ["id"]);
-    } else {
-      this._createMutationField(model, fieldName, inputName);
     }
   }
 
@@ -287,7 +439,14 @@ export class ModelPlugin implements ITransformerPlugin {
             ),
           ]
         )
-      );
+      )
+      .addNode(this._createIDLikeFilterInput("IDFilterInput", "ID"))
+      .addNode(this._createStringLikeFilterInput("StringFilterInput", "String"))
+      .addNode(this._createNumberLikeFilterInput("IntFilterInput", "Int"))
+      .addNode(this._createNumberLikeFilterInput("FloatFilterInput", "Float"))
+      .addNode(this._createBooleanLikeFilterInput("BooleanFilterInput", "Boolean"))
+      .addNode(this._createSizeFilterInput())
+      .addNode(this._createSortDirection());
   }
 
   public match(definition: DefinitionNode) {
@@ -301,17 +460,19 @@ export class ModelPlugin implements ITransformerPlugin {
     for (const verb of operations) {
       switch (verb) {
         case "get":
-          this._createGetQuery(definition);
-          break;
+          this._createGetQueryField(definition);
+          continue;
         case "list":
-          this._createListQuery(definition);
-          break;
+          this._createListQueryField(definition);
+          continue;
+        case "delete":
+          this._createDeleteMutationField(definition);
+          continue;
         case "create":
         case "upsert":
         case "update":
-        case "delete":
-          this._createMutation(definition, verb);
-          break;
+          this._createMutationField(definition, verb);
+          continue;
         default:
           continue;
       }

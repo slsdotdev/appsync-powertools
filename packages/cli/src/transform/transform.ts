@@ -1,6 +1,6 @@
 import { createLogger, Logger } from "@gqlbase/shared/logger";
 import { createTransformer, IPluginFactory } from "@gqlbase/core";
-import { definitionFromFiles } from "@gqlbase/shared/definition";
+import { definitionFromFiles } from "@gqlbase/shared/files";
 
 export interface TransformParams {
   sources: string[];

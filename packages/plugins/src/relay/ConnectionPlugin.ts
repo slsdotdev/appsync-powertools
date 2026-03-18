@@ -1,9 +1,7 @@
 import { ITransformerContext } from "@gqlbase/core/context";
-import { createPluginFactory, InternalDirective, ITransformerPlugin } from "@gqlbase/core/plugins";
+import { createPluginFactory, ITransformerPlugin } from "@gqlbase/core/plugins";
 import {
   DefinitionNode,
-  DirectiveDefinitionNode,
-  EnumNode,
   InputValueNode,
   InterfaceNode,
   ObjectNode,
@@ -13,11 +11,11 @@ import {
   ListTypeNode,
   NamedTypeNode,
   DirectiveNode,
-  InputObjectNode,
 } from "@gqlbase/core/definition";
 import { TransformerPluginExecutionError } from "@gqlbase/shared/errors";
 import { camelCase, pascalCase } from "@gqlbase/shared/format";
-import { isModel, UtilityDirective } from "../base/index.js";
+import { UtilityDirective } from "../base/index.js";
+import { isRelationField } from "../base/RelationsPlugin.js";
 
 export const ConnectionDirective = {
   HAS_ONE: "hasOne",
@@ -73,119 +71,10 @@ export class ConnectionPlugin implements ITransformerPlugin {
     this.context = context;
   }
 
-  // #region Model Resources
-
-  private _createSizeFilterInput() {
-    const input = InputObjectNode.create("SizeFilterInput", [
-      InputValueNode.create("ne", NamedTypeNode.create("Int")),
-      InputValueNode.create("eq", NamedTypeNode.create("Int")),
-      InputValueNode.create("le", NamedTypeNode.create("Int")),
-      InputValueNode.create("lt", NamedTypeNode.create("Int")),
-      InputValueNode.create("ge", NamedTypeNode.create("Int")),
-      InputValueNode.create("gt", NamedTypeNode.create("Int")),
-      InputValueNode.create("between", ListTypeNode.create(NonNullTypeNode.create("Int"))),
-    ]);
-
-    this.context.document.addNode(input);
-  }
-
-  private _createStringFilterInput() {
-    const input = InputObjectNode.create("StringFilterInput", [
-      InputValueNode.create("ne", NamedTypeNode.create("String")),
-      InputValueNode.create("eq", NamedTypeNode.create("String")),
-      InputValueNode.create("le", NamedTypeNode.create("String")),
-      InputValueNode.create("lt", NamedTypeNode.create("String")),
-      InputValueNode.create("ge", NamedTypeNode.create("String")),
-      InputValueNode.create("gt", NamedTypeNode.create("String")),
-      InputValueNode.create("in", ListTypeNode.create(NonNullTypeNode.create("String"))),
-      InputValueNode.create("contains", NamedTypeNode.create("String")),
-      InputValueNode.create("notContains", NamedTypeNode.create("String")),
-      InputValueNode.create("between", ListTypeNode.create(NonNullTypeNode.create("String"))),
-      InputValueNode.create("beginsWith", NamedTypeNode.create("String")),
-      InputValueNode.create("attributeExists", NamedTypeNode.create("Boolean")),
-      InputValueNode.create("size", NamedTypeNode.create("SizeFilterInput")),
-    ]);
-
-    this.context.document.addNode(input);
-  }
-
-  private _createIntFilterInput() {
-    const input = InputObjectNode.create("IntFilterInput", [
-      InputValueNode.create("ne", NamedTypeNode.create("Int")),
-      InputValueNode.create("eq", NamedTypeNode.create("Int")),
-      InputValueNode.create("le", NamedTypeNode.create("Int")),
-      InputValueNode.create("lt", NamedTypeNode.create("Int")),
-      InputValueNode.create("ge", NamedTypeNode.create("Int")),
-      InputValueNode.create("gt", NamedTypeNode.create("Int")),
-      InputValueNode.create("in", ListTypeNode.create(NonNullTypeNode.create("Int"))),
-      InputValueNode.create("between", ListTypeNode.create(NonNullTypeNode.create("Int"))),
-      InputValueNode.create("attributeExists", NamedTypeNode.create("Boolean")),
-    ]);
-
-    this.context.document.addNode(input);
-  }
-
-  private _createFloatFilterInput() {
-    const input = InputObjectNode.create("FloatFilterInput", [
-      InputValueNode.create("ne", NamedTypeNode.create("Float")),
-      InputValueNode.create("eq", NamedTypeNode.create("Float")),
-      InputValueNode.create("le", NamedTypeNode.create("Float")),
-      InputValueNode.create("lt", NamedTypeNode.create("Float")),
-      InputValueNode.create("ge", NamedTypeNode.create("Float")),
-      InputValueNode.create("gt", NamedTypeNode.create("Float")),
-      InputValueNode.create("in", ListTypeNode.create(NonNullTypeNode.create("Float"))),
-      InputValueNode.create("between", ListTypeNode.create(NonNullTypeNode.create("Float"))),
-      InputValueNode.create("attributeExists", NamedTypeNode.create("Boolean")),
-    ]);
-
-    this.context.document.addNode(input);
-  }
-
-  private _createBooleanFilterInput() {
-    const input = InputObjectNode.create("BooleanFilterInput", [
-      InputValueNode.create("ne", NamedTypeNode.create("Boolean")),
-      InputValueNode.create("eq", NamedTypeNode.create("Boolean")),
-      InputValueNode.create("attributeExists", NamedTypeNode.create("Boolean")),
-    ]);
-
-    this.context.document.addNode(input);
-  }
-
-  private _createIDFilterInput() {
-    const input = InputObjectNode.create("IDFilterInput", [
-      InputValueNode.create("ne", NamedTypeNode.create("ID")),
-      InputValueNode.create("eq", NamedTypeNode.create("ID")),
-      InputValueNode.create("in", ListTypeNode.create(NonNullTypeNode.create("ID"))),
-      InputValueNode.create("attributeExists", NamedTypeNode.create("Boolean")),
-    ]);
-
-    this.context.document.addNode(input);
-  }
-
-  private _createListFilterInput() {
-    const input = InputObjectNode.create("ListFilterInput", [
-      InputValueNode.create("contains", NamedTypeNode.create("String")),
-      InputValueNode.create("notContains", NamedTypeNode.create("String")),
-      InputValueNode.create("size", NamedTypeNode.create("SizeFilterInput")),
-    ]);
-
-    this.context.document.addNode(input);
-  }
-
-  private _createSortDirection() {
-    const enumNode = EnumNode.create("SortDirection", ["ASC", "DESC"]);
-    this.context.document.addNode(enumNode);
-  }
-
-  // #endregion Model Resources
-
   private _getConnectionTarget(field: FieldNode) {
     const fieldType = this.context.document.getNode(field.type.getTypeName());
 
-    if (
-      field.hasDirective(ConnectionDirective.HAS_ONE) ||
-      field.hasDirective(ConnectionDirective.HAS_MANY)
-    ) {
+    if (isRelationField(field)) {
       return fieldType;
     }
 
@@ -248,15 +137,7 @@ export class ConnectionPlugin implements ITransformerPlugin {
     );
   }
 
-  private _setConnectionArguments(
-    field: FieldNode,
-    target: ObjectNode | InterfaceNode | UnionNode
-  ) {
-    if (!field.hasArgument("filter") && isModel(target)) {
-      const filterInput = this._createFilterInput(target);
-      field.addArgument(InputValueNode.create("filter", NamedTypeNode.create(filterInput.name)));
-    }
-
+  private _setConnectionArguments(field: FieldNode) {
     if (!field.hasArgument("first")) {
       field.addArgument(InputValueNode.create("first", NamedTypeNode.create("Int")));
     }
@@ -281,114 +162,6 @@ export class ConnectionPlugin implements ITransformerPlugin {
         ])
       );
     }
-  }
-
-  private _createEnumFilterInput(node: EnumNode) {
-    const filterInputName = pascalCase(node.name, "filter", "input");
-
-    if (!this.context.document.hasNode(filterInputName)) {
-      const input = InputObjectNode.create(filterInputName, [
-        InputValueNode.create("eq", NamedTypeNode.create(node.name)),
-        InputValueNode.create("ne", NamedTypeNode.create(node.name)),
-        InputValueNode.create("in", ListTypeNode.create(NonNullTypeNode.create(node.name))),
-        InputValueNode.create("attributeExists", NamedTypeNode.create("Boolean")),
-      ]);
-
-      this.context.document.addNode(input);
-    }
-  }
-
-  private _createFilterInput(target: ObjectNode | InterfaceNode): InputObjectNode {
-    const filterInputName = pascalCase(target.name, "filter", "input");
-    let filterInput = this.context.document.getNode(filterInputName);
-
-    if (filterInput && !(filterInput instanceof InputObjectNode)) {
-      throw new TransformerPluginExecutionError(
-        this.name,
-        `Type ${filterInputName} is not an input type`
-      );
-    }
-
-    if (!filterInput) {
-      filterInput = InputObjectNode.create(filterInputName);
-
-      for (const field of target.fields ?? []) {
-        if (
-          field.hasDirective(UtilityDirective.WRITE_ONLY) ||
-          field.hasDirective(UtilityDirective.SERVER_ONLY) ||
-          field.hasDirective(UtilityDirective.CLIENT_ONLY)
-        ) {
-          continue;
-        }
-
-        switch (field.type.getTypeName()) {
-          case "ID":
-            filterInput.addField(
-              InputValueNode.create(field.name, NamedTypeNode.create(`IDFilterInput`))
-            );
-            continue;
-          case "Int":
-            filterInput.addField(
-              InputValueNode.create(field.name, NamedTypeNode.create("IntFilterInput"))
-            );
-            continue;
-          case "Float":
-            filterInput.addField(
-              InputValueNode.create(field.name, NamedTypeNode.create("FloatFilterInput"))
-            );
-            continue;
-          case "Boolean":
-            filterInput.addField(
-              InputValueNode.create(field.name, NamedTypeNode.create("BooleanFilterInput"))
-            );
-            continue;
-          case "String":
-          case "AWSDate":
-          case "AWSDateTime":
-          case "AWSTime":
-          case "AWSTimestamp":
-          case "AWSEmail":
-          case "AWSJSON":
-          case "AWSURL":
-          case "AWSPhone":
-          case "AWSIPAddress":
-            filterInput.addField(
-              InputValueNode.create(field.name, NamedTypeNode.create("StringFilterInput"))
-            );
-            continue;
-        }
-
-        const typeDef = this.context.document.getNode(field.type.getTypeName());
-
-        if (!typeDef) {
-          throw new TransformerPluginExecutionError(
-            this.name,
-            `Unknown type ${field.type.getTypeName()}`
-          );
-        }
-
-        if (typeDef instanceof EnumNode) {
-          this._createEnumFilterInput(typeDef);
-
-          filterInput.addField(
-            InputValueNode.create(
-              field.name,
-              NamedTypeNode.create(pascalCase(typeDef.name, "filter", "input"))
-            )
-          );
-        }
-
-        // TODO: handle nested objects filtering
-      }
-
-      filterInput.addField(InputValueNode.create("and", ListTypeNode.create(filterInputName)));
-      filterInput.addField(InputValueNode.create("or", ListTypeNode.create(filterInputName)));
-      filterInput.addField(InputValueNode.create("not", NamedTypeNode.create(filterInputName)));
-
-      this.context.document.addNode(filterInput);
-    }
-
-    return filterInput;
   }
 
   private _createConnectionTypes(field: FieldNode, connection: FieldConnection) {
@@ -426,7 +199,7 @@ export class ConnectionPlugin implements ITransformerPlugin {
         this.context.document.addNode(edgeType);
       }
 
-      this._setConnectionArguments(field, target);
+      this._setConnectionArguments(field);
       field.setType(NonNullTypeNode.create(connectionTypeName));
     }
   }
@@ -440,29 +213,7 @@ export class ConnectionPlugin implements ITransformerPlugin {
   }
 
   public init(): void {
-    this.context.base
-      .addNode(
-        EnumNode.create(
-          "ConnectionRelationType",
-          ["oneToMany", "manyToMany"],
-          [DirectiveNode.create(InternalDirective.INTERNAL)]
-        )
-      )
-      .addNode(
-        DirectiveDefinitionNode.create(ConnectionDirective.HAS_ONE, "FIELD_DEFINITION", [
-          InputValueNode.create("key", "String"),
-        ])
-      )
-      .addNode(
-        DirectiveDefinitionNode.create(ConnectionDirective.HAS_MANY, "FIELD_DEFINITION", [
-          InputValueNode.create("relation", "ConnectionRelationType"),
-          InputValueNode.create("key", "String"),
-        ])
-      );
-  }
-
-  public before() {
-    this.context.document.addNode(
+    this.context.base.addNode(
       ObjectNode.create("PageInfo", [
         FieldNode.create("hasNextPage", NamedTypeNode.create("Boolean")),
         FieldNode.create("hasPreviousPage", NamedTypeNode.create("Boolean")),
@@ -470,15 +221,6 @@ export class ConnectionPlugin implements ITransformerPlugin {
         FieldNode.create("endCursor", NamedTypeNode.create("String")),
       ])
     );
-
-    this._createSizeFilterInput();
-    this._createStringFilterInput();
-    this._createIntFilterInput();
-    this._createFloatFilterInput();
-    this._createBooleanFilterInput();
-    this._createIDFilterInput();
-    this._createListFilterInput();
-    this._createSortDirection();
   }
 
   public match(definition: DefinitionNode): boolean {
@@ -545,25 +287,6 @@ export class ConnectionPlugin implements ITransformerPlugin {
         this._createEdgesConnection(definition, field, connection);
       }
     }
-  }
-
-  public cleanup(definition: ObjectNode | InterfaceNode): void {
-    for (const field of definition.fields ?? []) {
-      if (field.hasDirective(ConnectionDirective.HAS_ONE)) {
-        field.removeDirective(ConnectionDirective.HAS_ONE);
-      }
-
-      if (field.hasDirective(ConnectionDirective.HAS_MANY)) {
-        field.removeDirective(ConnectionDirective.HAS_MANY);
-      }
-    }
-  }
-
-  public after(): void {
-    this.context.document
-      .removeNode(ConnectionDirective.HAS_ONE)
-      .removeNode(ConnectionDirective.HAS_MANY)
-      .removeNode("ConnectionRelationType");
   }
 }
 

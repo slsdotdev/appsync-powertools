@@ -13,7 +13,7 @@ export async function run(source: string | undefined, options: CliOptions) {
     mainLogger.debug("Received CLI options\n\n", { source, ...options });
     const config = await resolveConfig({ source, ...options });
 
-    mainLogger.debug("Resolved configuration\n\n", config);
+    mainLogger.info("Resolved configuration\n\n", config);
 
     const sources = Array.isArray(config.source) ? config.source : [config.source];
 

@@ -1,13 +1,13 @@
-import { globSync, readFileSync } from "node:fs";
+export const BuildInScalar = Object.freeze({
+  ID: "ID",
+  STRING: "String",
+  INT: "Int",
+  FLOAT: "Float",
+  BOOLEAN: "Boolean",
+});
 
-export function definitionFromFiles(files: string | string[]): string {
-  const paths = globSync(files).map((entry) => entry.toString());
+export type BuildInScalar = (typeof BuildInScalar)[keyof typeof BuildInScalar];
 
-  let definition = "";
-
-  for (const path of paths) {
-    definition += readFileSync(path, { encoding: "utf-8" });
-  }
-
-  return definition;
-}
+export const isBuildInScalar = (typeName: string): typeName is BuildInScalar => {
+  return Object.values(BuildInScalar).includes(typeName as BuildInScalar);
+};

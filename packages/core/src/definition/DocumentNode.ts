@@ -41,6 +41,27 @@ export class DocumentNode {
     return this.definitions.get(name);
   }
 
+  public getNodeOrThrow(name: string) {
+    const node = this.getNode(name);
+
+    if (!node) {
+      throw new InvalidDefinitionError(`Node with name ${name} does not exist`);
+    }
+
+    return node;
+  }
+
+  public getOrCreateNode<T extends DefinitionNode>(name: string, newNode: T): T {
+    let node = this.getNode(name);
+
+    if (!node) {
+      this.addNode(newNode);
+      node = newNode;
+    }
+
+    return node as T;
+  }
+
   public addNode(node: DefinitionNode) {
     if (this.hasNode(node.name)) {
       throw new Error(`Node with name ${node.name} already exists`);
