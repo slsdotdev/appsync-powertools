@@ -1,0 +1,314 @@
+# ==============================================================================
+# Farmers Market Platform — Vendor Domain
+# ==============================================================================
+# Vendor onboarding, profiles, team membership, operating schedules, and
+# market-location assignments.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Vendor
+# ------------------------------------------------------------------------------
+
+"""
+A vendor is a business entity that sells products through the marketplace.
+Vendors go through an application → review → approval lifecycle before they
+can list products. A vendor may operate at multiple market locations.
+"""
+type Vendor implements Node & Timestamped & Auditable & SoftDeletable & Versioned
+  @model
+  @scope(allow: [ADMIN, VENDOR]) {
+  id: UUID!
+  version: Int! @readOnly
+
+  """
+  URL-safe unique handle (e.g. `sunny-acres-farm`).
+  """
+  slug: String! @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 80)
+  businessName: String! @constraint(minLength: 2, maxLength: 200)
+  legalName: String @constraint(maxLength: 200) @scope(allow: [ADMIN, VENDOR])
+  description: String @constraint(maxLength: 2000)
+  shortBio: String @constraint(maxLength: 280)
+
+  logoUrl: URL
+  bannerUrl: URL
+  websiteUrl: URL
+
+  contactEmail: EmailAddress!
+  contactPhone: PhoneNumber
+  status: VendorStatus! @readOnly @scope(allow: [ADMIN])
+
+  """
+  Tax identification number — encrypted at rest, never exposed in API.
+  """
+  taxId: String @serverOnly
+
+  """
+  Stripe Connect (or equivalent) account identifier.
+  """
+  payoutAccountId: String @serverOnly
+
+  commissionRate: Decimal! @scope(allow: [ADMIN]) @auth(requires: ADMIN)
+  """
+  Platform hold period in hours before vendor payout is released.
+  """
+  payoutHoldHours: Int! @scope(allow: [ADMIN]) @auth(requires: ADMIN)
+
+  certifications: [VendorCertification!]!
+  tags: [String!]!
+
+  application: VendorApplication @hasOne @scope(allow: [ADMIN])
+  members: [VendorMember!]! @hasMany
+  products: [Product!]! @hasMany(key: "vendorId")
+  operatingSchedules: [OperatingSchedule!]! @hasMany
+  marketAssignments: [MarketVendorAssignment!]! @hasMany
+  payouts: [VendorPayout!]! @hasMany @scope(allow: [ADMIN, VENDOR])
+  vendorOrders: [VendorOrder!]! @hasMany
+
+  """
+  Average rating computed from all product reviews. Null if no reviews.
+  """
+  averageRating: Float @clientOnly @readOnly
+  totalReviewCount: Int! @clientOnly @readOnly
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+  createdBy: UUID @readOnly @serverOnly
+  updatedBy: UUID @readOnly @serverOnly
+  deletedAt: DateTime @readOnly @serverOnly
+  isArchived: Boolean! @readOnly
+}
+
+enum VendorStatus {
+  PENDING_APPLICATION
+  UNDER_REVIEW
+  APPROVED
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum VendorCertification {
+  USDA_ORGANIC
+  CERTIFIED_NATURALLY_GROWN
+  ANIMAL_WELFARE_APPROVED
+  FAIR_TRADE
+  NON_GMO_PROJECT
+  GAP_CERTIFIED
+  RAINFOREST_ALLIANCE
+}
+
+# ------------------------------------------------------------------------------
+# Vendor Application
+# ------------------------------------------------------------------------------
+
+"""
+Captures the full onboarding questionnaire submitted by a prospective vendor.
+Reviewed by admins; decision is recorded with optional notes.
+"""
+type VendorApplication implements Node & Timestamped & Auditable @model @scope(allow: [ADMIN]) {
+  id: UUID!
+  vendorId: UUID! @serverOnly
+
+  applicantUserId: UUID!
+  businessType: BusinessType!
+  yearsInOperation: Int @constraint(min: 0, max: 200)
+  productCategories: [String!]!
+  estimatedWeeklyRevenue: Money
+  farmSizeAcres: Float @constraint(min: 0)
+  farmAddress: String @constraint(maxLength: 500)
+
+  """
+  Free-form description of growing/production practices.
+  """
+  practicesDescription: String @constraint(maxLength: 5000)
+  documentUrls: [URL!]!
+
+  status: ApplicationStatus!
+  reviewerUserId: UUID @serverOnly
+  reviewNotes: String @constraint(maxLength: 5000)
+  reviewedAt: DateTime @readOnly
+  rejectionReason: ApplicationRejectionReason
+
+  vendor: Vendor! @hasOne
+  applicant: User! @hasOne(key: "applicantUserId")
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+  createdBy: UUID @readOnly @serverOnly
+  updatedBy: UUID @readOnly @serverOnly
+}
+
+enum BusinessType {
+  SOLE_PROPRIETOR
+  PARTNERSHIP
+  LLC
+  CORPORATION
+  COOPERATIVE
+  NONPROFIT
+}
+
+enum ApplicationStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum ApplicationRejectionReason {
+  INCOMPLETE_DOCUMENTATION
+  OUTSIDE_SERVICE_AREA
+  PRODUCT_CATEGORY_MISMATCH
+  FAILED_BACKGROUND_CHECK
+  DUPLICATE_APPLICATION
+  OTHER
+}
+
+# ------------------------------------------------------------------------------
+# Vendor Member (team)
+# ------------------------------------------------------------------------------
+
+"""
+Associates a user with a vendor in a specific role.
+A user may belong to at most one vendor at a time (enforced at service layer).
+"""
+type VendorMember implements Node & Timestamped @model @scope(allow: [ADMIN, VENDOR]) {
+  id: UUID!
+  vendorId: UUID! @serverOnly
+  userId: UUID! @serverOnly
+
+  role: VendorMemberRole!
+  permissions: [VendorPermission!]!
+  invitedByUserId: UUID @serverOnly
+  invitedAt: DateTime @readOnly
+  acceptedAt: DateTime @readOnly
+
+  vendor: Vendor! @hasOne
+  user: User! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+enum VendorMemberRole {
+  OWNER
+  MANAGER
+  STAFF
+}
+
+enum VendorPermission {
+  MANAGE_PRODUCTS
+  MANAGE_ORDERS
+  MANAGE_TEAM
+  VIEW_ANALYTICS
+  MANAGE_PAYOUTS
+  MANAGE_SETTINGS
+}
+
+# ------------------------------------------------------------------------------
+# Operating Schedule
+# ------------------------------------------------------------------------------
+
+"""
+Weekly operating windows for a vendor, optionally scoped to a specific market.
+If `marketLocationId` is null the schedule applies to the vendor's own
+storefront / online presence.
+"""
+type OperatingSchedule implements Node & Timestamped @model @scope(allow: [ADMIN, VENDOR, SHOP]) {
+  id: UUID!
+  vendorId: UUID! @serverOnly
+  marketLocationId: UUID @serverOnly
+
+  dayOfWeek: DayOfWeek!
+  timeRange: TimeRange!
+  isActive: Boolean!
+
+  """
+  Seasonal override: schedule only applies within this date range.
+  """
+  seasonalStart: Date
+  seasonalEnd: Date
+
+  vendor: Vendor! @hasOne
+  marketLocation: MarketLocation @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+# ------------------------------------------------------------------------------
+# Market Location
+# ------------------------------------------------------------------------------
+
+"""
+A physical farmers market site. Multiple vendors may be assigned to one
+market location on different days.
+"""
+type MarketLocation implements Node & Timestamped & SoftDeletable
+  @model
+  @scope(allow: [ADMIN, VENDOR, SHOP])
+  @cacheControl(maxAge: 3600, scope: PUBLIC) {
+  id: UUID!
+
+  name: String! @constraint(minLength: 2, maxLength: 200)
+  slug: String! @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 80)
+  description: String @constraint(maxLength: 2000)
+  address: String! @constraint(maxLength: 500)
+  location: GeoPoint!
+  coverImageUrl: URL
+  amenities: [MarketAmenity!]!
+
+  """
+  Whether the market is currently accepting new vendor applications.
+  """
+  acceptingVendors: Boolean!
+  maxVendorCapacity: Int @constraint(min: 1)
+
+  assignments: [MarketVendorAssignment!]! @hasMany
+  operatingSchedules: [OperatingSchedule!]! @hasMany
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+  deletedAt: DateTime @readOnly @serverOnly
+  isArchived: Boolean! @readOnly
+}
+
+enum MarketAmenity {
+  PARKING
+  RESTROOMS
+  ATM
+  LIVE_MUSIC
+  PET_FRIENDLY
+  WHEELCHAIR_ACCESSIBLE
+  EBT_ACCEPTED
+  COVERED_STALLS
+  FOOD_COURT
+}
+
+"""
+Junction entity: which vendor is at which market, with optional stall info.
+"""
+type MarketVendorAssignment implements Node & Timestamped @model @scope(allow: [ADMIN, VENDOR]) {
+  id: UUID!
+  vendorId: UUID! @serverOnly
+  marketLocationId: UUID! @serverOnly
+
+  stallNumber: String @constraint(maxLength: 20)
+  assignedDays: [DayOfWeek!]!
+  effectiveFrom: Date!
+  effectiveUntil: Date
+  status: AssignmentStatus!
+
+  vendor: Vendor! @hasOne
+  marketLocation: MarketLocation! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  PENDING
+  EXPIRED
+  REVOKED
+}

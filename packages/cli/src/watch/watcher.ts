@@ -1,6 +1,5 @@
 import { createLogger, Logger } from "@gqlbase/shared/logger";
 import { FSWatcher } from "chokidar";
-import { glob } from "tinyglobby";
 import pm from "picomatch";
 
 export const DEFAULT_IGNORED_DIRS = [
@@ -28,7 +27,12 @@ export async function start(params: StartWatcherParams): Promise<Watcher> {
 
   const ignoredPatterns = [...DEFAULT_IGNORED_DIRS, ...(params.ignored ?? [])];
 
-  const watcher = watch(await glob(params.paths), {
+  const watchPaths = params.paths.map((pattern) => {
+    const parsed = pm.scan(pattern);
+    return parsed.base || ".";
+  });
+
+  const watcher = watch(watchPaths, {
     ignoreInitial: true,
     ignorePermissionErrors: true,
     ignored: (path) =>

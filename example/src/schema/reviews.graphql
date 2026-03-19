@@ -1,0 +1,164 @@
+# ==============================================================================
+# Farmers Market Platform — Reviews Domain
+# ==============================================================================
+# Product reviews, vendor responses, and content moderation pipeline.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Review
+# ------------------------------------------------------------------------------
+
+"""
+Customer review of a purchased product. Reviews are only creatable after
+a fulfilled order containing the product. One review per user per product.
+"""
+type Review implements Node & Timestamped & SoftDeletable & Versioned
+  @model
+  @scope(allow: [ADMIN, VENDOR, SHOP]) {
+  id: UUID!
+  version: Int! @readOnly
+
+  productId: UUID! @serverOnly
+  userId: UUID! @serverOnly
+  """
+  The order that entitles this review. Used for verified-purchase badge.
+  """
+  orderId: UUID! @serverOnly
+
+  rating: Int! @constraint(min: 1, max: 5)
+  title: String @constraint(maxLength: 200)
+  body: String @constraint(maxLength: 5000)
+  imageUrls: [URL!]!
+
+  """
+  Whether the reviewer bought the product (always true; enforced by service).
+  """
+  isVerifiedPurchase: Boolean! @readOnly
+
+  moderationStatus: ModerationStatus! @readOnly @scope(allow: [ADMIN])
+  moderatedAt: DateTime @readOnly @scope(allow: [ADMIN])
+  moderatorNotes: String @scope(allow: [ADMIN]) @constraint(maxLength: 1000)
+
+  """
+  Number of "helpful" votes from other customers.
+  """
+  helpfulCount: Int! @readOnly
+  """
+  Number of "report" flags submitted against this review.
+  """
+  reportCount: Int! @readOnly @scope(allow: [ADMIN])
+
+  response: ReviewResponse @hasOne(key: "reviewId")
+  product: Product! @hasOne
+  user: User! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+  deletedAt: DateTime @readOnly @serverOnly
+  isArchived: Boolean! @readOnly
+}
+
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FLAGGED
+}
+
+# ------------------------------------------------------------------------------
+# Review Response (vendor reply)
+# ------------------------------------------------------------------------------
+
+"""
+Vendor's public response to a customer review.
+One response per review; the vendor may edit but not delete.
+"""
+type ReviewResponse implements Node & Timestamped & Versioned
+  @model
+  @scope(allow: [ADMIN, VENDOR, SHOP]) {
+  id: UUID!
+  version: Int! @readOnly
+  reviewId: UUID! @serverOnly
+  vendorId: UUID! @serverOnly
+  respondedByUserId: UUID! @serverOnly
+
+  body: String! @constraint(minLength: 1, maxLength: 2000)
+
+  moderationStatus: ModerationStatus! @readOnly @scope(allow: [ADMIN])
+
+  review: Review! @hasOne
+  vendor: Vendor! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+# ------------------------------------------------------------------------------
+# Review Helpfulness Vote
+# ------------------------------------------------------------------------------
+
+"""
+Tracks per-user votes on review helpfulness. Used to rank reviews.
+One vote per user per review, enforced by unique constraint.
+"""
+type ReviewVote implements Node & Timestamped @model @scope(allow: [SHOP]) {
+  id: UUID!
+  reviewId: UUID! @serverOnly
+  userId: UUID! @serverOnly
+
+  vote: ReviewVoteType!
+
+  review: Review! @hasOne
+  user: User! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+enum ReviewVoteType {
+  HELPFUL
+  NOT_HELPFUL
+}
+
+# ------------------------------------------------------------------------------
+# Review Report (abuse flag)
+# ------------------------------------------------------------------------------
+
+"""
+Customer-submitted flag indicating a review may violate community guidelines.
+Triggers moderation queue entry.
+"""
+type ReviewReport implements Node & Timestamped @model @scope(allow: [ADMIN]) {
+  id: UUID!
+  reviewId: UUID! @serverOnly
+  reporterUserId: UUID! @serverOnly
+
+  reason: ReviewReportReason!
+  details: String @constraint(maxLength: 1000)
+
+  status: ReviewReportStatus! @readOnly
+  resolvedAt: DateTime @readOnly
+  resolverNotes: String @constraint(maxLength: 1000)
+
+  review: Review! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+enum ReviewReportReason {
+  SPAM
+  OFFENSIVE_LANGUAGE
+  FAKE_REVIEW
+  IRRELEVANT_CONTENT
+  CONTAINS_PERSONAL_INFO
+  OTHER
+}
+
+enum ReviewReportStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED_NO_ACTION
+  RESOLVED_REMOVED
+  RESOLVED_EDITED
+}

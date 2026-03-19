@@ -1,0 +1,234 @@
+# ==============================================================================
+# Farmers Market Platform — Base Schema
+# ==============================================================================
+# Custom scalars, directive definitions, shared interfaces, and common enums.
+# All domain schemas depend on this file.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Custom Scalars
+# ------------------------------------------------------------------------------
+# Follows well-known community scalar specifications where applicable.
+# See: https://the-guild.dev/graphql/scalars
+
+"""
+ISO 8601 date-time string (e.g. `2025-03-18T14:30:00.000Z`).
+"""
+scalar DateTime
+
+"""
+ISO 8601 date string without time (e.g. `2025-03-18`).
+"""
+scalar Date
+
+"""
+Fixed-precision decimal encoded as a string to avoid floating-point drift.
+Suitable for monetary values (e.g. `"12.99"`).
+Conforms to IEEE 754 decimal128 semantics.
+"""
+scalar Decimal
+
+"""
+RFC 3986 compliant URL string.
+"""
+scalar URL
+
+"""
+RFC 5322 compliant email address.
+"""
+scalar EmailAddress
+
+"""
+E.164 formatted phone number (e.g. `+14155552671`).
+"""
+scalar PhoneNumber
+
+"""
+Arbitrary JSON value. Used sparingly for truly dynamic metadata.
+Prefer explicit types where the shape is known.
+"""
+scalar JSON
+
+"""
+UUID v4 string (e.g. `550e8400-e29b-41d4-a716-446655440000`).
+"""
+scalar UUID
+
+# ------------------------------------------------------------------------------
+# Domain Directives
+# ------------------------------------------------------------------------------
+
+"""
+Declares which access scopes may resolve or mutate this type or field.
+The transformer enforces visibility per scope at schema-generation time.
+"""
+directive @scope(allow: [AccessScope!]!) on OBJECT | FIELD_DEFINITION
+
+"""
+Marks a field as requiring a minimum role level within the resolved scope.
+Evaluated at runtime by the authorization layer.
+"""
+directive @auth(requires: Role!) on FIELD_DEFINITION
+
+"""
+Constrains a string or numeric field. Applied at input validation time.
+At least one parameter must be provided.
+"""
+directive @constraint(
+  minLength: Int
+  maxLength: Int
+  pattern: String
+  min: Float
+  max: Float
+) on FIELD_DEFINITION | INPUT_FIELD_DEFINITION | ARGUMENT_DEFINITION
+
+"""
+Marks a field as deprecated with a reason and an optional removal target.
+Extends the built-in @deprecated with a sunset date for tooling.
+"""
+directive @sunset(reason: String!, removeAfter: Date!) on FIELD_DEFINITION | ENUM_VALUE
+
+"""
+Opt-in field-level caching hint. The transformer attaches Cache-Control
+metadata to the response extensions when present.
+"""
+directive @cacheControl(maxAge: Int!, scope: CacheScope! = PUBLIC) on FIELD_DEFINITION | OBJECT
+
+# ------------------------------------------------------------------------------
+# Shared Interfaces
+# ------------------------------------------------------------------------------
+
+"""
+Relay-compatible global object identification.
+"""
+interface Node {
+  id: UUID!
+}
+
+"""
+Standard timestamp pair. All @model types should implement this.
+"""
+interface Timestamped {
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+"""
+Extended audit trail for admin-managed entities.
+"""
+interface Auditable implements Timestamped {
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+  createdBy: UUID @readOnly @serverOnly
+  updatedBy: UUID @readOnly @serverOnly
+}
+
+"""
+Entities that support logical (soft) deletion.
+Hard deletes are never performed on production data.
+"""
+interface SoftDeletable {
+  deletedAt: DateTime @readOnly @serverOnly
+  isArchived: Boolean! @readOnly
+}
+
+"""
+Entities with an optimistic-concurrency version vector.
+"""
+interface Versioned {
+  version: Int! @readOnly
+}
+
+# ------------------------------------------------------------------------------
+# Shared Enums
+# ------------------------------------------------------------------------------
+
+enum AccessScope {
+  ADMIN
+  VENDOR
+  SHOP
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  VENDOR_OWNER
+  VENDOR_STAFF
+  CUSTOMER
+  GUEST
+}
+
+enum CacheScope {
+  PUBLIC
+  PRIVATE
+}
+
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+enum Currency {
+  USD
+  EUR
+  GBP
+  CAD
+}
+
+# ------------------------------------------------------------------------------
+# Shared Value Types (embedded, non-model)
+# ------------------------------------------------------------------------------
+
+"""
+Monetary amount with explicit currency. Never store bare floats for money.
+"""
+type Money {
+  amount: Decimal!
+  currency: Currency!
+}
+
+input MoneyInput {
+  amount: Decimal!
+  currency: Currency!
+}
+
+"""
+GPS coordinates for market locations, delivery zones, etc.
+"""
+type GeoPoint {
+  latitude: Float!
+  longitude: Float!
+}
+
+input GeoPointInput {
+  latitude: Float!
+  longitude: Float!
+}
+
+"""
+Inclusive time range for a single day, in HH:mm (24h) local time.
+"""
+type TimeRange {
+  opensAt: String!
+  closesAt: String!
+}
+
+input TimeRangeInput {
+  opensAt: String!
+  closesAt: String!
+}
+
+"""
+Generic paginated connection following Relay specification.
+"""
+type PageInfo {
+  hasNextPage: Boolean!
+  hasPreviousPage: Boolean!
+  startCursor: String
+  endCursor: String
+}

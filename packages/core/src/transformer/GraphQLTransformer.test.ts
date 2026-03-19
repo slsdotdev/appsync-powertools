@@ -6,8 +6,11 @@ import { ITransformerPlugin } from "../plugins/ITransformerPlugin.js";
 import { DefinitionNode } from "../definition/DocumentNode.js";
 
 const mockLogger = vi.mockObject(Logger.prototype);
+const context = new TransformerContext({ logger: mockLogger });
+
 const testPlugin: ITransformerPlugin = {
   name: "TestPlugin",
+  context,
   init: vi.fn(),
   match: vi.fn().mockReturnValue(true),
   normalize: vi.fn(),
@@ -18,13 +21,10 @@ const testPlugin: ITransformerPlugin = {
 
 describe("GraphQLTransformer", () => {
   let transformer: GraphQLTransformer;
-  let context: TransformerContext;
 
   beforeEach(() => {
-    context = new TransformerContext();
     context.registerPlugin(testPlugin);
-
-    transformer = new GraphQLTransformer(context, { logger: mockLogger, throwOnError: true });
+    transformer = new GraphQLTransformer(context);
   });
 
   it("should throw error on schema with duplicate definition", () => {
@@ -52,10 +52,7 @@ describe("GraphQLTransformer", () => {
   });
 
   it("should not throw when `throwOnError` is false", () => {
-    const transformerWithNoThrow = new GraphQLTransformer(context, {
-      logger: mockLogger,
-      throwOnError: false,
-    });
+    const transformerWithNoThrow = new GraphQLTransformer(context);
 
     const invalidSource = /* GraphQL */ `
       type Query {
@@ -93,15 +90,15 @@ describe("GraphQLTransformer", () => {
   it("should prevent execution when definition does not match plugin", () => {
     const nonMatchingPlugin: ITransformerPlugin = {
       name: "NonMatchingPlugin",
+      context,
       init: vi.fn(),
       match: vi.fn().mockImplementation((node: DefinitionNode) => node.name !== "User"),
       normalize: vi.fn(),
       execute: vi.fn(),
     };
 
-    const context = new TransformerContext();
     context.registerPlugin(nonMatchingPlugin);
-    const transformer = new GraphQLTransformer(context, { logger: mockLogger, throwOnError: true });
+    const transformer = new GraphQLTransformer(context);
 
     const source = /* GraphQL */ `
       type Query {

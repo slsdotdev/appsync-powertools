@@ -1,0 +1,454 @@
+# ==============================================================================
+# Farmers Market Platform — Orders Domain
+# ==============================================================================
+# Shopping cart, multi-vendor order model, line items, fulfillment tracking,
+# and delivery/pickup logistics.
+#
+# Architecture:
+#   Cart ──checkout──▶ Order ──split──▶ VendorOrder[] ──▶ LineItem[]
+#                                            │
+#                                       Fulfillment
+#
+# A single customer Order is automatically split into one VendorOrder per
+# distinct vendor. Each VendorOrder has independent fulfillment lifecycle so
+# vendors can process and ship at their own pace. The customer sees a unified
+# order; the vendor sees only their VendorOrder.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Cart
+# ------------------------------------------------------------------------------
+
+"""
+Ephemeral shopping cart. Carts are unauthenticated-friendly (linked to a
+session token) and merged into the user's cart on login. Carts expire after
+`CART_TTL_HOURS` of inactivity (configurable per environment).
+"""
+type Cart implements Node & Timestamped @model @scope(allow: [SHOP]) {
+  id: UUID!
+
+  """
+  Null for guest carts; set on login or registration.
+  """
+  userId: UUID @serverOnly
+  sessionToken: String! @serverOnly
+
+  items: [CartItem!]! @hasMany
+  appliedCouponCodes: [String!]!
+
+  """
+  Computed subtotal across all items before discounts and tax.
+  """
+  subtotal: Money! @clientOnly @readOnly
+  """
+  Computed discount amount from applied coupons.
+  """
+  discountTotal: Money! @clientOnly @readOnly
+  """
+  Computed item count across all items.
+  """
+  itemCount: Int! @clientOnly @readOnly
+
+  expiresAt: DateTime! @readOnly
+
+  user: User @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+type CartItem implements Node & Timestamped @model @scope(allow: [SHOP]) {
+  id: UUID!
+  cartId: UUID! @serverOnly
+  variantId: UUID!
+
+  quantity: Int! @constraint(min: 1, max: 999)
+
+  """
+  Snapshotted unit price at time of add-to-cart. Re-validated at checkout
+  to catch stale prices.
+  """
+  unitPrice: Money! @readOnly
+
+  """
+  Special instructions for this item (e.g. "extra ripe").
+  """
+  notes: String @constraint(maxLength: 300)
+
+  cart: Cart! @hasOne
+  variant: ProductVariant! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+# ------------------------------------------------------------------------------
+# Order (customer-facing aggregate)
+# ------------------------------------------------------------------------------
+
+"""
+Top-level order placed by a customer. Contains one or more `VendorOrder`
+groups. Payment is captured at this level; disbursement to vendors happens
+at the `VendorOrder` level after fulfillment.
+"""
+type Order implements Node & Timestamped & Versioned @model @scope(allow: [ADMIN, SHOP]) {
+  id: UUID!
+  version: Int! @readOnly
+  userId: UUID! @serverOnly
+
+  """
+  Human-readable order number with a prefix and sequence.
+  Format: `FM-YYYYMMDD-XXXXX` (e.g. `FM-20250318-00042`).
+  """
+  orderNumber: String! @readOnly @constraint(pattern: "^FM-\\d{8}-\\d{5}$")
+
+  status: OrderStatus! @readOnly
+  fulfillmentMethod: FulfillmentMethod!
+
+  """
+  Address snapshot at time of order. Null for pickup orders.
+  """
+  shippingAddress: OrderAddress
+  """
+  Selected pickup location, if applicable.
+  """
+  pickupLocationId: UUID @serverOnly
+  pickupLocation: MarketLocation @hasOne
+
+  """
+  Requested delivery/pickup date. Null means "as soon as possible".
+  """
+  requestedDate: Date
+  customerNotes: String @constraint(maxLength: 1000)
+
+  # ----- Monetary breakdown (all snapshotted at checkout) -----
+  subtotal: Money!
+  discountTotal: Money!
+  taxTotal: Money!
+  deliveryFee: Money!
+  tip: Money!
+  grandTotal: Money!
+
+  """
+  ISO 3166-2 tax jurisdiction code used for tax calculation.
+  """
+  taxJurisdiction: String @serverOnly @constraint(maxLength: 10)
+
+  vendorOrders: [VendorOrder!]! @hasMany
+  transactions: [PaymentTransaction!]! @hasMany
+  timeline: [OrderTimelineEvent!]! @hasMany @readOnly
+
+  cancelledAt: DateTime @readOnly
+  cancellationReason: OrderCancellationReason @readOnly
+
+  user: User! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+"""
+Denormalized address snapshot frozen at order time. Stored inline so
+future edits to the user's address book don't affect historical orders.
+"""
+type OrderAddress {
+  recipientName: String!
+  line1: String!
+  line2: String
+  city: String!
+  state: String!
+  postalCode: String!
+  countryCode: String!
+  location: GeoPoint
+}
+
+input OrderAddressInput {
+  recipientName: String!
+  line1: String!
+  line2: String
+  city: String!
+  state: String!
+  postalCode: String!
+  countryCode: String!
+  location: GeoPointInput
+}
+
+enum OrderStatus {
+  """
+  Order created, awaiting payment capture.
+  """
+  PENDING_PAYMENT
+  """
+  Payment captured; vendor orders created and dispatched.
+  """
+  CONFIRMED
+  """
+  All vendor orders are in processing or beyond.
+  """
+  PROCESSING
+  """
+  At least one vendor order has shipped / is ready for pickup.
+  """
+  PARTIALLY_FULFILLED
+  """
+  All vendor orders fulfilled and delivered/picked up.
+  """
+  FULFILLED
+  """
+  Order cancelled before full fulfillment.
+  """
+  CANCELLED
+  """
+  Refund issued (partial or full).
+  """
+  REFUNDED
+}
+
+enum FulfillmentMethod {
+  DELIVERY
+  MARKET_PICKUP
+  SHIPPING
+}
+
+enum OrderCancellationReason {
+  CUSTOMER_REQUEST
+  PAYMENT_FAILED
+  OUT_OF_STOCK
+  VENDOR_UNABLE
+  FRAUD_SUSPECTED
+  ADMIN_ACTION
+}
+
+# ------------------------------------------------------------------------------
+# Vendor Order (per-vendor slice)
+# ------------------------------------------------------------------------------
+
+"""
+The portion of an `Order` that belongs to a single vendor.
+Vendors only see and manage their own VendorOrders.
+"""
+type VendorOrder implements Node & Timestamped & Versioned @model @scope(allow: [ADMIN, VENDOR]) {
+  id: UUID!
+  version: Int! @readOnly
+  orderId: UUID! @serverOnly
+  vendorId: UUID! @serverOnly
+
+  """
+  Vendor-facing reference number. Format: `VO-<vendorShortCode>-XXXXX`.
+  """
+  referenceNumber: String! @readOnly
+
+  status: VendorOrderStatus!
+  subtotal: Money!
+  commissionAmount: Money! @readOnly @scope(allow: [ADMIN])
+  vendorNetAmount: Money! @readOnly @scope(allow: [ADMIN, VENDOR])
+
+  lineItems: [LineItem!]! @hasMany
+  fulfillment: Fulfillment @hasOne(key: "vendorOrderId")
+
+  vendorNotes: String @constraint(maxLength: 1000) @scope(allow: [ADMIN, VENDOR])
+  acknowledgedAt: DateTime @readOnly
+  estimatedReadyAt: DateTime
+
+  order: Order! @hasOne
+  vendor: Vendor! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+enum VendorOrderStatus {
+  PENDING_ACKNOWLEDGEMENT
+  ACKNOWLEDGED
+  PREPARING
+  READY
+  HANDED_OFF
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+# ------------------------------------------------------------------------------
+# Line Item
+# ------------------------------------------------------------------------------
+
+"""
+Individual item within a vendor order. All monetary fields are snapshot values
+captured at checkout time and are immutable.
+"""
+type LineItem implements Node & Timestamped @model @scope(allow: [ADMIN, VENDOR, SHOP]) {
+  id: UUID!
+  vendorOrderId: UUID! @serverOnly
+  variantId: UUID!
+
+  """
+  Product name at time of purchase (denormalized for historical accuracy).
+  """
+  productName: String!
+  variantName: String!
+  sku: String @scope(allow: [ADMIN, VENDOR])
+
+  quantity: Int! @constraint(min: 1)
+  unitPrice: Money!
+  """
+  Discount applied to this line (coupon or promo).
+  """
+  discount: Money!
+  """
+  Tax on this line item.
+  """
+  tax: Money!
+  lineTotal: Money!
+
+  """
+  For weight-based products: actual measured weight at fulfillment.
+  """
+  actualWeight: Float @scope(allow: [ADMIN, VENDOR])
+  actualWeightUnit: WeightUnit @scope(allow: [ADMIN, VENDOR])
+
+  notes: String @constraint(maxLength: 300)
+
+  """
+  Per-item fulfillment status for partial-fulfillment scenarios.
+  """
+  fulfillmentStatus: LineItemFulfillmentStatus! @readOnly
+
+  vendorOrder: VendorOrder! @hasOne
+  variant: ProductVariant! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+enum LineItemFulfillmentStatus {
+  UNFULFILLED
+  FULFILLED
+  PARTIALLY_FULFILLED
+  RETURNED
+  CANCELLED
+}
+
+# ------------------------------------------------------------------------------
+# Fulfillment
+# ------------------------------------------------------------------------------
+
+"""
+Physical fulfillment record for a VendorOrder. One fulfillment per
+VendorOrder. Contains tracking info and delivery confirmation.
+"""
+type Fulfillment implements Node & Timestamped @model @scope(allow: [ADMIN, VENDOR]) {
+  id: UUID!
+  vendorOrderId: UUID! @serverOnly
+
+  status: FulfillmentStatus!
+  method: FulfillmentMethod!
+
+  """
+  Carrier name for shipped orders (e.g. "USPS", "FedEx").
+  """
+  carrier: String @constraint(maxLength: 100)
+  trackingNumber: String @constraint(maxLength: 200)
+  trackingUrl: URL
+
+  """
+  Scheduled window for delivery or pickup.
+  """
+  scheduledDate: Date
+  scheduledTimeRange: TimeRange
+
+  packedAt: DateTime @readOnly
+  shippedAt: DateTime @readOnly
+  deliveredAt: DateTime @readOnly
+  """
+  URL to proof-of-delivery photo.
+  """
+  deliveryProofUrl: URL @readOnly
+
+  """
+  Internal notes visible only to vendor and admin.
+  """
+  internalNotes: String @constraint(maxLength: 1000)
+
+  vendorOrder: VendorOrder! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+enum FulfillmentStatus {
+  PENDING
+  PACKING
+  PACKED
+  IN_TRANSIT
+  OUT_FOR_DELIVERY
+  DELIVERED
+  READY_FOR_PICKUP
+  PICKED_UP
+  FAILED_DELIVERY
+  RETURNED_TO_VENDOR
+}
+
+# ------------------------------------------------------------------------------
+# Order Timeline
+# ------------------------------------------------------------------------------
+
+"""
+Append-only audit log of significant events on an order.
+Rendered as a customer-visible timeline in the shop scope and a
+detailed internal log in admin/vendor scopes.
+"""
+type OrderTimelineEvent implements Node & Timestamped @model @scope(allow: [ADMIN, VENDOR, SHOP]) {
+  id: UUID!
+  orderId: UUID! @serverOnly
+  vendorOrderId: UUID @serverOnly
+
+  event: OrderEvent!
+  actorType: ActorType!
+  actorId: UUID @serverOnly
+
+  """
+  Human-readable summary shown to the customer.
+  """
+  publicMessage: String @constraint(maxLength: 500)
+  """
+  Detailed internal note for staff.
+  """
+  internalMessage: String @constraint(maxLength: 1000) @scope(allow: [ADMIN, VENDOR])
+  """
+  Machine-readable metadata (e.g. tracking info, status transition).
+  """
+  metadata: JSON @scope(allow: [ADMIN, VENDOR])
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+enum OrderEvent {
+  ORDER_PLACED
+  PAYMENT_CAPTURED
+  PAYMENT_FAILED
+  VENDOR_ORDER_CREATED
+  VENDOR_ACKNOWLEDGED
+  PREPARATION_STARTED
+  READY_FOR_HANDOFF
+  SHIPPED
+  OUT_FOR_DELIVERY
+  DELIVERED
+  PICKED_UP
+  PARTIALLY_FULFILLED
+  FULLY_FULFILLED
+  CANCELLATION_REQUESTED
+  CANCELLED
+  REFUND_INITIATED
+  REFUND_COMPLETED
+  DISPUTE_OPENED
+  DISPUTE_RESOLVED
+  NOTE_ADDED
+}
+
+enum ActorType {
+  CUSTOMER
+  VENDOR
+  ADMIN
+  SYSTEM
+}

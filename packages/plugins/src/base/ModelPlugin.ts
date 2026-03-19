@@ -15,7 +15,7 @@ import {
   ObjectNode,
   ScalarNode,
 } from "@gqlbase/core/definition";
-import { createPluginFactory, InternalDirective } from "@gqlbase/core/plugins";
+import { createPluginFactory, getTypeHint, InternalDirective } from "@gqlbase/core/plugins";
 import { TransformerPluginExecutionError } from "@gqlbase/shared/errors";
 import { camelCase, pascalCase, pluralize } from "@gqlbase/shared/format";
 import { isClientOnly, isReadOnly, isServerOnly, isWriteOnly } from "./UtilitiesPlugin.js";
@@ -201,9 +201,9 @@ export class ModelPlugin implements ITransformerPlugin {
   }
 
   private _createListLikeFilterInput(name: string, typeName: string) {
-    const input = InputObjectNode.create(typeName, [
-      InputValueNode.create("contains", NamedTypeNode.create(name)),
-      InputValueNode.create("notContains", NamedTypeNode.create(name)),
+    const input = InputObjectNode.create(name, [
+      InputValueNode.create("contains", NamedTypeNode.create(typeName)),
+      InputValueNode.create("notContains", NamedTypeNode.create(typeName)),
       InputValueNode.create("size", NamedTypeNode.create("SizeFilterInput")),
     ]);
 
@@ -219,6 +219,24 @@ export class ModelPlugin implements ITransformerPlugin {
     ]);
 
     return input;
+  }
+
+  private _createScalarFilterInput(node: ScalarNode, inputName: string) {
+    const scalarType = getTypeHint(node);
+
+    switch (scalarType) {
+      case "string":
+        return this._createStringLikeFilterInput(inputName, node.name);
+      case "int":
+      case "float":
+        return this._createNumberLikeFilterInput(inputName, node.name);
+      case "boolean":
+        return this._createBooleanLikeFilterInput(inputName, node.name);
+      case "id":
+        return this._createIDLikeFilterInput(inputName, node.name);
+      default:
+        return null;
+    }
   }
 
   private _createFilterInput(target: ObjectNode | InterfaceNode): InputObjectNode {
@@ -250,12 +268,24 @@ export class ModelPlugin implements ITransformerPlugin {
 
         const typeDef = this.context.document.getNodeOrThrow(typeName);
 
+        if (typeDef instanceof ScalarNode) {
+          const scalarFilterInputName = pascalCase(typeDef.name, "filter", "input");
+
+          if (!this.context.document.hasNode(scalarFilterInputName)) {
+            const scalarFilterInput = this._createScalarFilterInput(typeDef, scalarFilterInputName);
+
+            if (scalarFilterInput) {
+              this.context.document.addNode(scalarFilterInput);
+            }
+          }
+        }
+
         if (field.type instanceof ListTypeNode && typeDef instanceof ScalarNode) {
           const listFilterInputName = pascalCase(typeDef.name, "list", "filter", "input");
 
           if (!this.context.document.hasNode(listFilterInputName)) {
-            this._createListLikeFilterInput(typeDef.name, typeName);
-            this.context.document.addNode(filterInput);
+            const listFilterInput = this._createListLikeFilterInput(listFilterInputName, typeName);
+            this.context.document.addNode(listFilterInput);
           }
 
           filterInput.addField(

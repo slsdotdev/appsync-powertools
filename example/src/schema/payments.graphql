@@ -1,0 +1,345 @@
+# ==============================================================================
+# Farmers Market Platform — Payments Domain
+# ==============================================================================
+# Payment instruments, transaction lifecycle, vendor disbursements, refunds,
+# and promotional coupons.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Payment Method (customer-saved instruments)
+# ------------------------------------------------------------------------------
+
+"""
+Tokenized payment method stored via the payment processor.
+The platform never stores raw card numbers — only processor tokens and
+display-safe metadata.
+"""
+type PaymentMethod implements Node & Timestamped @model @scope(allow: [ADMIN, SHOP]) {
+  id: UUID!
+  userId: UUID! @serverOnly
+
+  type: PaymentMethodType!
+  """
+  Processor-issued token for charges (e.g. Stripe `pm_xxx`).
+  """
+  processorToken: String! @serverOnly
+
+  """
+  Display-safe last 4 digits or account identifier.
+  """
+  lastFour: String @constraint(pattern: "^\\d{4}$") @readOnly
+  brand: CardBrand @readOnly
+  expiryMonth: Int @readOnly @constraint(min: 1, max: 12)
+  expiryYear: Int @readOnly @constraint(min: 2024, max: 2099)
+
+  """
+  Billing address for AVS verification.
+  """
+  billingAddress: OrderAddress
+
+  isDefault: Boolean!
+  isExpired: Boolean! @clientOnly @readOnly
+
+  user: User! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+enum PaymentMethodType {
+  CREDIT_CARD
+  DEBIT_CARD
+  BANK_ACCOUNT
+  APPLE_PAY
+  GOOGLE_PAY
+  EBT
+  GIFT_CARD
+}
+
+enum CardBrand {
+  VISA
+  MASTERCARD
+  AMEX
+  DISCOVER
+  OTHER
+}
+
+# ------------------------------------------------------------------------------
+# Payment Transaction
+# ------------------------------------------------------------------------------
+
+"""
+Records every payment operation against an Order.
+The lifecycle is: PENDING → (AUTHORIZED → CAPTURED | VOIDED) or FAILED.
+Refunds produce new Transaction records with type REFUND.
+"""
+type PaymentTransaction implements Node & Timestamped @model @scope(allow: [ADMIN, SHOP]) {
+  id: UUID!
+  orderId: UUID! @serverOnly
+  paymentMethodId: UUID @serverOnly
+
+  """
+  Idempotency key sent to the processor to prevent duplicate charges.
+  """
+  idempotencyKey: UUID! @serverOnly
+
+  type: TransactionType!
+  status: TransactionStatus!
+  amount: Money!
+
+  """
+  Processor's transaction identifier for reconciliation.
+  """
+  processorTransactionId: String @serverOnly
+  processorResponse: JSON @serverOnly
+
+  """
+  Gateway-level decline code if status is FAILED.
+  """
+  failureCode: String @readOnly @constraint(maxLength: 50)
+  failureMessage: String @readOnly @constraint(maxLength: 500)
+
+  """
+  Links refund transactions back to the original capture.
+  """
+  parentTransactionId: UUID @serverOnly
+  parentTransaction: PaymentTransaction @hasOne(key: "parentTransactionId")
+
+  order: Order! @hasOne
+  paymentMethod: PaymentMethod @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+enum TransactionType {
+  AUTHORIZATION
+  CAPTURE
+  VOID
+  REFUND
+  CHARGEBACK
+  CHARGEBACK_REVERSAL
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+# ------------------------------------------------------------------------------
+# Vendor Payout
+# ------------------------------------------------------------------------------
+
+"""
+Scheduled or completed disbursement to a vendor. Payouts aggregate earnings
+from one or more fulfilled VendorOrders minus platform commission.
+"""
+type VendorPayout implements Node & Timestamped @model @scope(allow: [ADMIN, VENDOR]) {
+  id: UUID!
+  vendorId: UUID! @serverOnly
+
+  status: PayoutStatus!
+  grossAmount: Money!
+  commissionDeducted: Money!
+  adjustments: Money!
+  netAmount: Money!
+  currency: Currency!
+
+  """
+  Processor-issued payout/transfer identifier.
+  """
+  processorPayoutId: String @serverOnly
+
+  periodStart: DateTime!
+  periodEnd: DateTime!
+  scheduledAt: DateTime
+  initiatedAt: DateTime @readOnly
+  completedAt: DateTime @readOnly
+  failedAt: DateTime @readOnly
+  failureReason: String @readOnly @constraint(maxLength: 500)
+
+  """
+  VendorOrders included in this payout batch.
+  """
+  vendorOrderIds: [UUID!]! @serverOnly
+  lineItemSummary: [PayoutLineItemSummary!]! @readOnly
+
+  vendor: Vendor! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+"""
+Read-only summary of a vendor order's contribution to a payout.
+Not a @model — embedded within VendorPayout responses.
+"""
+type PayoutLineItemSummary {
+  vendorOrderId: UUID!
+  orderNumber: String!
+  gross: Money!
+  commission: Money!
+  net: Money!
+}
+
+enum PayoutStatus {
+  SCHEDULED
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  ON_HOLD
+}
+
+# ------------------------------------------------------------------------------
+# Refund
+# ------------------------------------------------------------------------------
+
+"""
+Tracks refund decisions, which may be partial (specific line items)
+or full (entire order). Generates a REFUND PaymentTransaction on approval.
+"""
+type Refund implements Node & Timestamped & Auditable @model @scope(allow: [ADMIN, VENDOR]) {
+  id: UUID!
+  orderId: UUID! @serverOnly
+  vendorOrderId: UUID @serverOnly
+
+  status: RefundStatus!
+  type: RefundType!
+  reason: RefundReason!
+  customerNote: String @constraint(maxLength: 1000)
+  internalNote: String @constraint(maxLength: 1000) @scope(allow: [ADMIN])
+
+  requestedAmount: Money!
+  approvedAmount: Money @readOnly
+  """
+  Items being refunded. Null for full-order refunds.
+  """
+  lineItemIds: [UUID!]
+
+  transactionId: UUID @serverOnly
+  transaction: PaymentTransaction @hasOne(key: "transactionId")
+  order: Order! @hasOne
+
+  requestedAt: DateTime! @readOnly
+  reviewedAt: DateTime @readOnly
+  completedAt: DateTime @readOnly
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+  createdBy: UUID @readOnly @serverOnly
+  updatedBy: UUID @readOnly @serverOnly
+}
+
+enum RefundStatus {
+  REQUESTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  COMPLETED
+  CANCELLED
+}
+
+enum RefundType {
+  FULL
+  PARTIAL
+  LINE_ITEM
+}
+
+enum RefundReason {
+  DAMAGED_PRODUCT
+  WRONG_ITEM
+  QUALITY_ISSUE
+  NEVER_RECEIVED
+  CHANGED_MIND
+  DUPLICATE_ORDER
+  VENDOR_CANCELLATION
+  OTHER
+}
+
+# ------------------------------------------------------------------------------
+# Coupon / Promo Code
+# ------------------------------------------------------------------------------
+
+"""
+Promotional discount code. Supports fixed-amount, percentage, and
+free-delivery discounts with flexible targeting rules.
+"""
+type Coupon implements Node & Timestamped & Auditable & SoftDeletable
+  @model
+  @scope(allow: [ADMIN]) {
+  id: UUID!
+
+  code: String! @constraint(pattern: "^[A-Z0-9-]{3,30}$")
+  description: String @constraint(maxLength: 500)
+
+  discountType: DiscountType!
+  """
+  Fixed amount off, or percentage value (e.g. 10 for 10%).
+  """
+  discountValue: Decimal!
+  """
+  Maximum discount in currency for percentage coupons.
+  """
+  maxDiscountAmount: Money
+  """
+  Minimum order subtotal required to apply.
+  """
+  minimumOrderAmount: Money
+
+  """
+  Restrict to specific vendor(s). Empty = platform-wide.
+  """
+  applicableVendorIds: [UUID!]!
+  """
+  Restrict to specific category(ies). Empty = all categories.
+  """
+  applicableCategoryIds: [UUID!]!
+
+  usageLimit: Int @constraint(min: 1)
+  usageLimitPerUser: Int @constraint(min: 1)
+  currentUsageCount: Int! @readOnly
+
+  startsAt: DateTime!
+  expiresAt: DateTime
+  isActive: Boolean!
+
+  """
+  Coupon only valid for first-time customers.
+  """
+  firstTimeCustomerOnly: Boolean!
+
+  redemptions: [CouponRedemption!]! @hasMany @scope(allow: [ADMIN])
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+  createdBy: UUID @readOnly @serverOnly
+  updatedBy: UUID @readOnly @serverOnly
+  deletedAt: DateTime @readOnly @serverOnly
+  isArchived: Boolean! @readOnly
+}
+
+enum DiscountType {
+  FIXED_AMOUNT
+  PERCENTAGE
+  FREE_DELIVERY
+}
+
+type CouponRedemption implements Node & Timestamped @model @scope(allow: [ADMIN]) {
+  id: UUID!
+  couponId: UUID! @serverOnly
+  orderId: UUID! @serverOnly
+  userId: UUID! @serverOnly
+
+  discountApplied: Money!
+
+  coupon: Coupon! @hasOne
+  order: Order! @hasOne
+  user: User! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}

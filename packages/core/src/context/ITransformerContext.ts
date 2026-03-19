@@ -1,3 +1,4 @@
+import { Logger } from "@gqlbase/shared/logger";
 import { DocumentNode } from "../definition/DocumentNode.js";
 import { ITransformerPlugin } from "../plugins/ITransformerPlugin.js";
 
@@ -15,6 +16,11 @@ export interface ITransformerContext {
    * An array of registered transformer plugins. Plugins can access this array to interact with other plugins or to add new plugins dynamically.
    */
   readonly plugins: ITransformerPlugin[];
+
+  /** A logger instance that plugins can use to log messages during the transformation process. This can be used for debugging, informational messages, or error reporting.
+   */
+
+  readonly logger: Logger;
 
   /**
    * The GraphQL document being transformed. This is a mutable object that plugins can modify during the transformation process.

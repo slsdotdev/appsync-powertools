@@ -1,0 +1,374 @@
+# ==============================================================================
+# Farmers Market Platform — Catalog Domain
+# ==============================================================================
+# Product taxonomy, listings, variants, inventory management, seasonal
+# availability, and allergen/nutritional metadata.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Category
+# ------------------------------------------------------------------------------
+
+"""
+Hierarchical product taxonomy. Supports one level of nesting via `parentId`.
+Categories are admin-managed and shared across all vendors.
+"""
+type Category implements Node & Timestamped & SoftDeletable
+  @model
+  @scope(allow: [ADMIN, VENDOR, SHOP])
+  @cacheControl(maxAge: 7200, scope: PUBLIC) {
+  id: UUID!
+
+  name: String! @constraint(minLength: 1, maxLength: 120)
+  slug: String! @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 80)
+  description: String @constraint(maxLength: 1000)
+  iconUrl: URL
+  sortOrder: Int!
+
+  parentId: UUID @serverOnly
+  parent: Category @hasOne
+  children: [Category!]! @hasMany(key: "parentId")
+  products: [Product!]! @hasMany
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+  deletedAt: DateTime @readOnly @serverOnly
+  isArchived: Boolean! @readOnly
+}
+
+# ------------------------------------------------------------------------------
+# Product
+# ------------------------------------------------------------------------------
+
+"""
+A product listing owned by a single vendor. Products are the canonical
+item identity; variants represent purchasable SKUs (size, weight, bundle).
+
+Weight-based products (e.g. meat sold per-pound) set `pricingModel` to
+`PER_UNIT_WEIGHT` and store price-per-unit on variants. The final line-item
+price is computed at checkout from actual weight.
+"""
+type Product implements Node & Timestamped & Auditable & SoftDeletable & Versioned
+  @model
+  @scope(allow: [ADMIN, VENDOR, SHOP]) {
+  id: UUID!
+  version: Int! @readOnly
+  vendorId: UUID! @serverOnly
+  categoryId: UUID! @serverOnly
+
+  name: String! @constraint(minLength: 1, maxLength: 200)
+  slug: String! @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 120)
+  description: String @constraint(maxLength: 5000)
+  shortDescription: String @constraint(maxLength: 280)
+
+  status: ProductStatus!
+  visibility: ProductVisibility!
+  pricingModel: PricingModel!
+
+  """
+  Primary display image.
+  """
+  featuredImageUrl: URL
+  imageUrls: [URL!]!
+
+  """
+  Structured attributes for faceted search and display.
+  """
+  attributes: ProductAttributes!
+
+  """
+  SEO and social-sharing metadata. Null fields fall back to product name/description.
+  """
+  seoTitle: String @constraint(maxLength: 70)
+  seoDescription: String @constraint(maxLength: 160)
+
+  tags: [String!]!
+
+  """
+  Seasonal availability window. Null means available year-round.
+  """
+  seasonalStart: Date
+  seasonalEnd: Date
+
+  """
+  Whether this product can be pre-ordered before season starts.
+  """
+  preOrderEnabled: Boolean!
+  preOrderLeadDays: Int @constraint(min: 1, max: 90)
+
+  vendor: Vendor! @hasOne
+  category: Category! @hasOne
+  variants: [ProductVariant!]! @hasMany
+  reviews: [Review!]! @hasMany
+  priceHistory: [PriceHistoryEntry!]! @hasMany @scope(allow: [ADMIN, VENDOR])
+
+  """
+  Aggregated rating. Computed at read-time from reviews.
+  """
+  averageRating: Float @clientOnly @readOnly
+  reviewCount: Int! @clientOnly @readOnly
+
+  """
+  Lowest current variant price, for display in listing cards.
+  """
+  startingPrice: Money @clientOnly @readOnly
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+  createdBy: UUID @readOnly @serverOnly
+  updatedBy: UUID @readOnly @serverOnly
+  deletedAt: DateTime @readOnly @serverOnly
+  isArchived: Boolean! @readOnly
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  OUT_OF_SEASON
+  DISCONTINUED
+}
+
+enum ProductVisibility {
+  PUBLIC
+  UNLISTED
+  PRIVATE
+}
+
+enum PricingModel {
+  """
+  Standard fixed price per unit.
+  """
+  FIXED
+  """
+  Price per unit of weight (lb/kg). Final price calculated at fulfillment.
+  """
+  PER_UNIT_WEIGHT
+  """
+  Customer chooses amount; used for CSA shares and gift cards.
+  """
+  PAY_WHAT_YOU_WANT
+}
+
+# ------------------------------------------------------------------------------
+# Product Attributes (embedded value object)
+# ------------------------------------------------------------------------------
+
+"""
+Structured product metadata for filtering, display, and compliance.
+Not all fields apply to every product category.
+"""
+type ProductAttributes {
+  allergens: [Allergen!]!
+  dietaryTags: [DietaryTag!]!
+  certifications: [VendorCertification!]!
+
+  """
+  Unit of weight for weight-priced items (e.g. LB, KG).
+  """
+  weightUnit: WeightUnit
+  """
+  Approximate weight per unit for fixed-price items sold by piece.
+  """
+  approximateWeightPerUnit: Float
+
+  """
+  Free-form origin description (e.g. "Sonoma County, CA").
+  """
+  origin: String @constraint(maxLength: 200)
+  harvestMethod: HarvestMethod
+  storageInstructions: String @constraint(maxLength: 500)
+  shelfLifeDays: Int @constraint(min: 0)
+}
+
+input ProductAttributesInput {
+  allergens: [Allergen!]
+  dietaryTags: [DietaryTag!]
+  certifications: [VendorCertification!]
+  weightUnit: WeightUnit
+  approximateWeightPerUnit: Float
+  origin: String @constraint(maxLength: 200)
+  harvestMethod: HarvestMethod
+  storageInstructions: String @constraint(maxLength: 500)
+  shelfLifeDays: Int @constraint(min: 0)
+}
+
+enum Allergen {
+  MILK
+  EGGS
+  FISH
+  SHELLFISH
+  TREE_NUTS
+  PEANUTS
+  WHEAT
+  SOY
+  SESAME
+}
+
+enum WeightUnit {
+  LB
+  KG
+  OZ
+  G
+}
+
+enum HarvestMethod {
+  HAND_PICKED
+  MACHINE_HARVESTED
+  WILD_FORAGED
+  GREENHOUSE
+  HYDROPONIC
+  AQUAPONIC
+}
+
+# ------------------------------------------------------------------------------
+# Product Variant
+# ------------------------------------------------------------------------------
+
+"""
+Purchasable SKU within a product. A product must have at least one variant.
+Examples: "1 lb bag", "5 lb case", "Pint", "Quart".
+"""
+type ProductVariant implements Node & Timestamped & Versioned
+  @model
+  @scope(allow: [ADMIN, VENDOR, SHOP]) {
+  id: UUID!
+  version: Int! @readOnly
+  productId: UUID! @serverOnly
+
+  """
+  Display label (e.g. "1 lb bag", "Half dozen").
+  """
+  name: String! @constraint(minLength: 1, maxLength: 120)
+  sku: String! @constraint(pattern: "^[A-Z0-9-]{3,40}$") @scope(allow: [ADMIN, VENDOR])
+
+  price: Money!
+
+  """
+  Compare-at price for sale display. Must be greater than `price` when set.
+  """
+  compareAtPrice: Money
+
+  """
+  Cost of goods for margin reporting. Vendor-only.
+  """
+  costOfGoods: Money @scope(allow: [ADMIN, VENDOR])
+
+  """
+  Weight in `weightUnit` for per-unit-weight products.
+  """
+  weight: Float @constraint(min: 0)
+  weightUnit: WeightUnit
+
+  isDefault: Boolean!
+  sortOrder: Int!
+
+  product: Product! @hasOne
+  inventory: InventoryRecord @hasOne(key: "variantId")
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+# ------------------------------------------------------------------------------
+# Inventory
+# ------------------------------------------------------------------------------
+
+"""
+Real-time stock tracking per variant. Inventory is decremented optimistically
+on order placement and reconciled on fulfillment or cancellation.
+"""
+type InventoryRecord implements Node & Timestamped & Versioned
+  @model
+  @scope(allow: [ADMIN, VENDOR]) {
+  id: UUID!
+  version: Int! @readOnly
+  variantId: UUID! @serverOnly
+
+  """
+  Units currently available for sale.
+  """
+  quantityOnHand: Int! @constraint(min: 0)
+  """
+  Units reserved by pending orders (not yet fulfilled).
+  """
+  quantityReserved: Int! @constraint(min: 0) @readOnly
+  """
+  Threshold below which low-stock alerts fire.
+  """
+  lowStockThreshold: Int! @constraint(min: 0)
+
+  trackInventory: Boolean!
+
+  """
+  Whether the product can still be purchased when out of stock.
+  """
+  allowBackorder: Boolean!
+  backorderLimit: Int @constraint(min: 0)
+
+  """
+  Computed: quantityOnHand - quantityReserved.
+  """
+  quantityAvailable: Int! @clientOnly @readOnly
+
+  variant: ProductVariant! @hasOne
+  adjustments: [InventoryAdjustment!]! @hasMany
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+"""
+Immutable audit log for every inventory change. Enables full traceability
+from receiving through sale.
+"""
+type InventoryAdjustment implements Node & Timestamped @model @scope(allow: [ADMIN, VENDOR]) {
+  id: UUID!
+  inventoryRecordId: UUID! @serverOnly
+
+  quantityChange: Int!
+  reason: InventoryAdjustmentReason!
+  referenceType: String @constraint(maxLength: 50)
+  referenceId: UUID
+  notes: String @constraint(maxLength: 500)
+
+  performedByUserId: UUID @serverOnly
+
+  inventoryRecord: InventoryRecord! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+enum InventoryAdjustmentReason {
+  RECEIVED
+  SOLD
+  RETURNED
+  DAMAGED
+  EXPIRED
+  CORRECTION
+  TRANSFER
+  RESERVED
+  RELEASED
+}
+
+# ------------------------------------------------------------------------------
+# Price History
+# ------------------------------------------------------------------------------
+
+"""
+Immutable record of every price change for analytics and compliance.
+One entry per variant per change event.
+"""
+type PriceHistoryEntry implements Node & Timestamped @model @scope(allow: [ADMIN, VENDOR]) {
+  id: UUID!
+  productId: UUID! @serverOnly
+  variantId: UUID!
+
+  previousPrice: Money!
+  newPrice: Money!
+  changedByUserId: UUID @serverOnly
+  reason: String @constraint(maxLength: 500)
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}

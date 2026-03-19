@@ -1,0 +1,121 @@
+# ==============================================================================
+# Farmers Market Platform — Subscriptions & Real-Time Events
+# ==============================================================================
+# GraphQL subscriptions for live updates across all three scopes.
+# Uses interfaces and unions for polymorphic event streams.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Subscription Event Interface
+# ------------------------------------------------------------------------------
+
+"""
+Common envelope for all subscription events. Clients can subscribe to a
+broad stream and discriminate via `__typename` on the `data` union, or
+subscribe to a narrower topic-specific field.
+"""
+interface SubscriptionEvent {
+  eventId: UUID!
+  occurredAt: DateTime!
+  actorType: ActorType!
+}
+
+# ------------------------------------------------------------------------------
+# Order Subscription Events
+# ------------------------------------------------------------------------------
+
+type OrderUpdatedEvent implements SubscriptionEvent {
+  eventId: UUID!
+  occurredAt: DateTime!
+  actorType: ActorType!
+
+  orderId: UUID!
+  orderNumber: String!
+  previousStatus: OrderStatus
+  newStatus: OrderStatus!
+  timelineEntry: OrderTimelineEvent
+}
+
+type VendorOrderUpdatedEvent implements SubscriptionEvent {
+  eventId: UUID!
+  occurredAt: DateTime!
+  actorType: ActorType!
+
+  vendorOrderId: UUID!
+  referenceNumber: String!
+  vendorId: UUID!
+  previousStatus: VendorOrderStatus
+  newStatus: VendorOrderStatus!
+}
+
+# ------------------------------------------------------------------------------
+# Inventory Subscription Events
+# ------------------------------------------------------------------------------
+
+type InventoryLowStockEvent implements SubscriptionEvent {
+  eventId: UUID!
+  occurredAt: DateTime!
+  actorType: ActorType!
+
+  variantId: UUID!
+  productId: UUID!
+  productName: String!
+  variantName: String!
+  quantityAvailable: Int!
+  lowStockThreshold: Int!
+}
+
+type InventoryOutOfStockEvent implements SubscriptionEvent {
+  eventId: UUID!
+  occurredAt: DateTime!
+  actorType: ActorType!
+
+  variantId: UUID!
+  productId: UUID!
+  productName: String!
+  variantName: String!
+}
+
+# ------------------------------------------------------------------------------
+# Live Event Union
+# ------------------------------------------------------------------------------
+
+"""
+Unified event stream for dashboard-style consumers. Allows a single
+WebSocket subscription that multiplexes all event types.
+"""
+union LiveEvent =
+  | OrderUpdatedEvent
+  | VendorOrderUpdatedEvent
+  | InventoryLowStockEvent
+  | InventoryOutOfStockEvent
+
+# ------------------------------------------------------------------------------
+# Subscription Root
+# ------------------------------------------------------------------------------
+
+type Subscription {
+  """
+  Customer-facing: real-time updates for a specific order.
+  Scope: SHOP.
+  """
+  orderUpdated(orderId: UUID!): OrderUpdatedEvent! @scope(allow: [SHOP])
+
+  """
+  Vendor-facing: updates on all vendor orders for a given vendor.
+  Scope: VENDOR.
+  """
+  vendorOrderUpdated(vendorId: UUID!): VendorOrderUpdatedEvent! @scope(allow: [VENDOR])
+
+  """
+  Vendor-facing: inventory alerts for all products under a vendor.
+  Scope: VENDOR.
+  """
+  inventoryAlert(vendorId: UUID!): LiveEvent! @scope(allow: [VENDOR])
+
+  """
+  Admin-facing: firehose of all platform events for monitoring dashboards.
+  Scope: ADMIN.
+  """
+  platformEvents: LiveEvent! @scope(allow: [ADMIN]) @auth(requires: ADMIN)
+}

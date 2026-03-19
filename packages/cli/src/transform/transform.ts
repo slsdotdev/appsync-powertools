@@ -23,11 +23,7 @@ export async function transform(params: TransformParams) {
 
   const definition = definitionFromFiles(params.sources);
 
-  logger.debug("Parsed GraphQL definition\n\n");
-  logger.debug(definition);
-
-  const output = transformer.transform(definition);
+  transformer.transform(definition);
 
   logger.success(`Transformation completed in  ${Math.floor(performance.now() - startTime)}ms`);
-  logger.debug("Transformation output\n\n", output);
 }

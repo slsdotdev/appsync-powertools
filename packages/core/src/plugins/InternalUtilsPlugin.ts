@@ -99,6 +99,20 @@ export const isInternal = (node: DefinitionNode): boolean => {
   return false;
 };
 
+/**
+ * Utility function to get the type hint from a scalar node. If the node has a _@gqlbase_typehint_ directive, it returns the value of the `type` argument. Otherwise, it defaults to "string".
+ *
+ * @param node - Scalar node to check for type hint annotatation
+ * @returns The type hint specified in the directive or "string" if no directive is present.
+ * @default "string"
+ *
+ * @example
+ *
+ * ```graphql
+ * scalar DateTime \@gqlbase_typehint(type: "string")
+ * ```
+ */
+
 export const getTypeHint = (node: ScalarNode): string => {
   const directive = node.getDirective(InternalDirective.TYPE_HINT);
 

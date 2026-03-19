@@ -6,4 +6,5 @@ export {
   InternalUtilsPlugin,
   internalPlugin,
   isInternal,
+  getTypeHint,
 } from "./InternalUtilsPlugin.js";

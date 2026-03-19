@@ -1,0 +1,196 @@
+# ==============================================================================
+# Farmers Market Platform — Users & Authentication Domain
+# ==============================================================================
+# User accounts, addresses, preferences, and authentication artifacts.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# User
+# ------------------------------------------------------------------------------
+
+"""
+Platform user account. A single person may hold multiple roles simultaneously
+(e.g. a vendor owner who is also a customer). Role resolution is contextual
+and driven by the access token's active scope.
+"""
+type User implements Node & Timestamped & SoftDeletable & Versioned
+  @model
+  @scope(allow: [ADMIN, VENDOR, SHOP]) {
+  id: UUID!
+  version: Int! @readOnly
+
+  email: EmailAddress! @constraint(maxLength: 320)
+  phone: PhoneNumber
+  passwordHash: String! @serverOnly @writeOnly
+
+  firstName: String! @constraint(minLength: 1, maxLength: 100)
+  lastName: String! @constraint(minLength: 1, maxLength: 100)
+  displayName: String @constraint(maxLength: 150)
+
+  """
+  Computed full name: `firstName + " " + lastName`.
+  """
+  fullName: String! @clientOnly @readOnly
+
+  avatarUrl: URL
+  roles: [Role!]! @readOnly @scope(allow: [ADMIN])
+
+  emailVerifiedAt: DateTime @readOnly
+  phoneVerifiedAt: DateTime @readOnly
+  lastLoginAt: DateTime @readOnly
+  loginCount: Int! @readOnly @scope(allow: [ADMIN])
+
+  locale: Locale!
+  timezone: String! @constraint(maxLength: 64)
+
+  addresses: [Address!]! @hasMany
+  preferences: UserPreferences @hasOne
+
+  """
+  Active vendor membership, if any. Null for pure customers.
+  """
+  vendorMembership: VendorMember @hasOne @scope(allow: [ADMIN, VENDOR])
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+  deletedAt: DateTime! @readOnly @serverOnly
+  isArchived: Boolean! @readOnly
+}
+
+enum Locale {
+  EN_US
+  EN_GB
+  ES_US
+  FR_CA
+}
+
+# ------------------------------------------------------------------------------
+# Address
+# ------------------------------------------------------------------------------
+
+"""
+Postal address attached to a user. Addresses are soft-referenced by orders
+at snapshot time so edits here do not retroactively change historical records.
+"""
+type Address implements Node & Timestamped @model @scope(allow: [ADMIN, VENDOR, SHOP]) {
+  id: UUID!
+  userId: UUID! @serverOnly
+
+  label: AddressLabel!
+  recipientName: String @constraint(maxLength: 200)
+  line1: String! @constraint(minLength: 1, maxLength: 200)
+  line2: String @constraint(maxLength: 200)
+  city: String! @constraint(maxLength: 120)
+  state: String! @constraint(maxLength: 120)
+  postalCode: String! @constraint(pattern: "^[A-Za-z0-9 -]{3,10}$")
+  countryCode: String! @constraint(pattern: "^[A-Z]{2}$")
+  location: GeoPoint
+
+  isDefault: Boolean!
+  deliveryNotes: String @constraint(maxLength: 500)
+
+  user: User! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+enum AddressLabel {
+  HOME
+  WORK
+  MARKET_PICKUP
+  OTHER
+}
+
+# ------------------------------------------------------------------------------
+# User Preferences
+# ------------------------------------------------------------------------------
+
+"""
+Per-user settings and preference flags. One-to-one with User.
+Split from User to keep the core record lean.
+"""
+type UserPreferences implements Node @model @scope(allow: [ADMIN, SHOP]) {
+  id: UUID!
+  userId: UUID! @serverOnly
+
+  emailNotifications: Boolean!
+  smsNotifications: Boolean!
+  pushNotifications: Boolean!
+
+  marketingOptIn: Boolean!
+  marketingOptInAt: DateTime @readOnly
+
+  preferredCurrency: Currency!
+  preferredLocale: Locale!
+
+  dietaryTags: [DietaryTag!]!
+  allergenAlerts: [Allergen!]!
+
+  user: User! @hasOne
+}
+
+enum DietaryTag {
+  VEGETARIAN
+  VEGAN
+  GLUTEN_FREE
+  DAIRY_FREE
+  NUT_FREE
+  PALEO
+  KETO
+  ORGANIC_ONLY
+  LOCAL_ONLY
+}
+
+# ------------------------------------------------------------------------------
+# Authentication Artifacts
+# ------------------------------------------------------------------------------
+
+"""
+Refresh token family for token rotation. Stored server-side;
+the client only ever holds the opaque token string.
+"""
+type RefreshTokenFamily implements Node & Timestamped @model @scope(allow: [ADMIN]) {
+  id: UUID!
+  userId: UUID! @serverOnly
+
+  tokenHash: String! @serverOnly
+  familyId: UUID! @serverOnly
+  generationCounter: Int!
+
+  userAgent: String @constraint(maxLength: 512)
+  ipAddress: String @serverOnly
+  revokedAt: DateTime @readOnly
+
+  expiresAt: DateTime!
+
+  user: User! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+"""
+Tracks password-reset and email-verification tokens.
+Single-use; consumed flag prevents replay.
+"""
+type VerificationToken implements Node & Timestamped @model @scope(allow: [ADMIN]) {
+  id: UUID!
+  userId: UUID! @serverOnly
+
+  tokenHash: String! @serverOnly
+  purpose: VerificationPurpose!
+  consumedAt: DateTime @readOnly
+  expiresAt: DateTime!
+
+  user: User! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+enum VerificationPurpose {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  PHONE_VERIFICATION
+}

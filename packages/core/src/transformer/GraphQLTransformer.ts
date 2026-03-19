@@ -1,14 +1,8 @@
 import { performance } from "node:perf_hooks";
 import { Source } from "graphql";
-import { Logger } from "@gqlbase/shared/logger";
 import { TransformerValidationError } from "@gqlbase/shared/errors";
 import type { ITransformerContext } from "../context/ITransformerContext.js";
 import { DocumentNode } from "../definition/DocumentNode.js";
-
-export interface GraphQLTransformerOptions {
-  logger: Logger;
-  throwOnError?: boolean;
-}
 
 export interface TransformerOutput {
   [key: string]: unknown;
@@ -32,108 +26,93 @@ export interface TransformerOutput {
 
 export class GraphQLTransformer {
   private readonly _context: ITransformerContext;
-  private readonly _logger: Logger;
-  private readonly _options: GraphQLTransformerOptions;
 
-  constructor(context: ITransformerContext, options: GraphQLTransformerOptions) {
+  constructor(context: ITransformerContext) {
     this._context = context;
-    this._logger = options.logger;
-    this._options = options;
   }
 
   public transform(source: string | Source): TransformerOutput {
-    try {
-      const startTime = performance.now();
-      this._logger.debug("Starting transformation process...");
-      const document = this._context.startWork(DocumentNode.fromSource(source));
+    const startTime = performance.now();
+    this._context.logger.debug("Starting transformation process...");
+    const document = this._context.startWork(DocumentNode.fromSource(source));
 
-      const errors = document.validate();
+    const errors = document.validate();
 
-      if (errors.length) {
-        throw new TransformerValidationError(errors);
-      }
+    if (errors.length) {
+      throw new TransformerValidationError(errors);
+    }
 
-      this._logger.debug(
-        `Validation completed in ${(performance.now() - startTime).toFixed(2)}ms.`
-      );
+    this._context.logger.debug(
+      `Validation completed in ${(performance.now() - startTime).toFixed(2)}ms.`
+    );
 
-      this._logger.debug(`Document contains ${document.definitions.size} definitions.`);
+    this._context.logger.debug(`Document contains ${document.definitions.size} definitions.`);
 
-      for (const plugin of this._context.plugins) {
-        if (typeof plugin.before === "function") {
-          plugin.before();
-        }
-      }
-
-      this._logger.debug("Starting normalization phase...");
-
-      for (const definition of document.definitions.values()) {
-        for (const plugin of this._context.plugins) {
-          if (plugin.match(definition) && typeof plugin.normalize === "function") {
-            plugin.normalize(definition);
-          }
-        }
-      }
-
-      this._logger.debug(
-        `Normalization phase completed in ${(performance.now() - startTime).toFixed(2)}ms.`
-      );
-
-      this._logger.debug("Starting execution phase...");
-
-      for (const definition of document.definitions.values()) {
-        for (const plugin of this._context.plugins) {
-          if (plugin.match(definition) && typeof plugin.execute === "function") {
-            plugin.execute(definition);
-          }
-        }
-      }
-
-      this._logger.debug(
-        `Execution phase completed in ${(performance.now() - startTime).toFixed(2)}ms.`
-      );
-
-      for (const definition of document.definitions.values()) {
-        for (const plugin of this._context.plugins) {
-          if (plugin.match(definition) && typeof plugin.cleanup === "function") {
-            plugin.cleanup(definition);
-          }
-        }
-      }
-
-      for (const plugin of this._context.plugins) {
-        if (typeof plugin.after === "function") {
-          plugin.after();
-        }
-      }
-
-      for (const plugin of this._context.plugins) {
-        if (typeof plugin.generate === "function") {
-          plugin.generate();
-        }
-      }
-
-      const output = {
-        schema: document.print(),
-      };
-
-      for (const plugin of this._context.plugins) {
-        if (typeof plugin.output === "function") {
-          Object.assign(output, plugin.output());
-        }
-      }
-
-      this._context.finishWork();
-      return output;
-    } catch (error) {
-      this._context.finishWork();
-
-      if (this._options.throwOnError) {
-        throw error;
-      } else {
-        this._logger.error(error instanceof Error ? error.stack || error.message : String(error));
-        return { schema: "" };
+    for (const plugin of this._context.plugins) {
+      if (typeof plugin.before === "function") {
+        plugin.before();
       }
     }
+
+    this._context.logger.debug("Starting normalization phase...");
+
+    for (const definition of document.definitions.values()) {
+      for (const plugin of this._context.plugins) {
+        if (plugin.match(definition) && typeof plugin.normalize === "function") {
+          plugin.normalize(definition);
+        }
+      }
+    }
+
+    this._context.logger.debug(
+      `Normalization phase completed in ${(performance.now() - startTime).toFixed(2)}ms.`
+    );
+
+    this._context.logger.debug("Starting execution phase...");
+
+    for (const definition of document.definitions.values()) {
+      for (const plugin of this._context.plugins) {
+        if (plugin.match(definition) && typeof plugin.execute === "function") {
+          plugin.execute(definition);
+        }
+      }
+    }
+
+    this._context.logger.debug(
+      `Execution phase completed in ${(performance.now() - startTime).toFixed(2)}ms.`
+    );
+
+    for (const definition of document.definitions.values()) {
+      for (const plugin of this._context.plugins) {
+        if (plugin.match(definition) && typeof plugin.cleanup === "function") {
+          plugin.cleanup(definition);
+        }
+      }
+    }
+
+    for (const plugin of this._context.plugins) {
+      if (typeof plugin.after === "function") {
+        plugin.after();
+      }
+    }
+
+    for (const plugin of this._context.plugins) {
+      if (typeof plugin.generate === "function") {
+        plugin.generate();
+      }
+    }
+
+    const output = {
+      schema: document.print(),
+    };
+
+    for (const plugin of this._context.plugins) {
+      if (typeof plugin.output === "function") {
+        Object.assign(output, plugin.output());
+      }
+    }
+
+    this._context.finishWork();
+    return output;
   }
 }

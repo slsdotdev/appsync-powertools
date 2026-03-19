@@ -31,8 +31,8 @@ export interface GraphQLTransformerOptions {
 export function createTransformer(options: GraphQLTransformerOptions) {
   const { outputDirectory = "generated", plugins } = options;
 
-  const context = new TransformerContext({ outputDirectory });
   const logger = options.logger ?? createLogger("GraphQLTransformer");
+  const context = new TransformerContext({ outputDirectory, logger });
 
   const internalUtils = internalPlugin().create(context);
   context.registerPlugin(internalUtils);
@@ -42,5 +42,5 @@ export function createTransformer(options: GraphQLTransformerOptions) {
     context.registerPlugin(plugin);
   }
 
-  return new GraphQLTransformer(context, { logger });
+  return new GraphQLTransformer(context);
 }

@@ -1,0 +1,306 @@
+# ==============================================================================
+# Farmers Market Platform — Search, Discovery & Audit Domain
+# ==============================================================================
+# Unified search, customer wishlists, saved searches, and platform-wide
+# audit log with union-typed event payloads.
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Search Result Union
+# ------------------------------------------------------------------------------
+
+"""
+Polymorphic search result returned by the unified search endpoint.
+Clients use inline fragments to handle each result type.
+"""
+union SearchResult = ProductSearchHit | VendorSearchHit | MarketLocationSearchHit
+
+type ProductSearchHit {
+  product: Product!
+  """
+  Relevance score from the search engine (0.0 – 1.0).
+  """
+  score: Float!
+  """
+  Highlighted name snippet with <mark> tags.
+  """
+  highlightedName: String
+  highlightedDescription: String
+}
+
+type VendorSearchHit {
+  vendor: Vendor!
+  score: Float!
+  highlightedName: String
+}
+
+type MarketLocationSearchHit {
+  marketLocation: MarketLocation!
+  score: Float!
+  """
+  Distance from the searcher's location, in miles.
+  """
+  distanceMiles: Float
+}
+
+# ------------------------------------------------------------------------------
+# Wishlist
+# ------------------------------------------------------------------------------
+
+"""
+Customer wishlist / favorites list. Each user has one default wishlist
+and may create additional named lists.
+"""
+type Wishlist implements Node & Timestamped @model @scope(allow: [SHOP]) {
+  id: UUID!
+  userId: UUID! @serverOnly
+
+  name: String! @constraint(minLength: 1, maxLength: 100)
+  isDefault: Boolean! @readOnly
+  visibility: WishlistVisibility!
+
+  items: [WishlistItem!]! @hasMany
+  user: User! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+enum WishlistVisibility {
+  PRIVATE
+  SHARED_VIA_LINK
+  PUBLIC
+}
+
+type WishlistItem implements Node & Timestamped @model @scope(allow: [SHOP]) {
+  id: UUID!
+  wishlistId: UUID! @serverOnly
+  productId: UUID!
+  variantId: UUID
+
+  notes: String @constraint(maxLength: 300)
+
+  """
+  Product snapshot fields for rendering even if product is removed.
+  """
+  productName: String! @readOnly
+  productImageUrl: URL @readOnly
+
+  wishlist: Wishlist! @hasOne
+  product: Product! @hasOne
+  variant: ProductVariant @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+# ------------------------------------------------------------------------------
+# Saved Search
+# ------------------------------------------------------------------------------
+
+"""
+Persisted search query for "notify me" or quick-access functionality.
+Optionally triggers a notification when new matching products appear.
+"""
+type SavedSearch implements Node & Timestamped @model @scope(allow: [SHOP]) {
+  id: UUID!
+  userId: UUID! @serverOnly
+
+  label: String @constraint(maxLength: 120)
+  query: String! @constraint(maxLength: 500)
+  filters: SavedSearchFilters!
+
+  notifyOnNewResults: Boolean!
+  lastNotifiedAt: DateTime @readOnly
+
+  user: User! @hasOne
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+"""
+Structured filter criteria persisted with a saved search.
+Mirrors the catalog search filter input, but stored as a value object.
+"""
+type SavedSearchFilters {
+  categoryIds: [UUID!]
+  vendorIds: [UUID!]
+  dietaryTags: [DietaryTag!]
+  allergenExclusions: [Allergen!]
+  certifications: [VendorCertification!]
+  priceMin: Decimal
+  priceMax: Decimal
+  radiusMiles: Float
+  centerPoint: GeoPoint
+}
+
+input SavedSearchFiltersInput {
+  categoryIds: [UUID!]
+  vendorIds: [UUID!]
+  dietaryTags: [DietaryTag!]
+  allergenExclusions: [Allergen!]
+  certifications: [VendorCertification!]
+  priceMin: Decimal
+  priceMax: Decimal
+  radiusMiles: Float
+  centerPoint: GeoPointInput
+}
+
+# ------------------------------------------------------------------------------
+# Audit Log
+# ------------------------------------------------------------------------------
+
+"""
+Platform-wide immutable audit log. Every state-changing operation produces
+an entry. The `payload` union provides structured before/after snapshots
+for key entity types.
+"""
+type AuditLogEntry implements Node & Timestamped @model @scope(allow: [ADMIN]) {
+  id: UUID!
+
+  action: AuditAction!
+  entityType: String! @constraint(maxLength: 50)
+  entityId: UUID!
+  actorType: ActorType!
+  actorId: UUID @serverOnly
+
+  ipAddress: String @serverOnly
+  userAgent: String @serverOnly @constraint(maxLength: 512)
+
+  """
+  Structured change payload. Null for simple actions (e.g. login).
+  """
+  payload: AuditPayload
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  ARCHIVE
+  RESTORE
+  LOGIN
+  LOGOUT
+  PERMISSION_CHANGE
+  STATUS_CHANGE
+  EXPORT
+}
+
+"""
+Union of structured audit payloads. Enables querying specific change
+details without parsing opaque JSON.
+"""
+union AuditPayload = EntityChangePayload | StatusChangePayload | PermissionChangePayload
+
+"""
+Generic before/after snapshot for entity mutations.
+"""
+type EntityChangePayload {
+  """
+  JSON-serialized previous state. Null for CREATE actions.
+  """
+  previousState: JSON
+  """
+  JSON-serialized new state. Null for DELETE actions.
+  """
+  newState: JSON
+  """
+  List of top-level field names that changed.
+  """
+  changedFields: [String!]!
+}
+
+"""
+Dedicated payload for status transitions (order, vendor, application).
+"""
+type StatusChangePayload {
+  previousStatus: String!
+  newStatus: String!
+  reason: String
+}
+
+"""
+Dedicated payload for permission and role changes.
+"""
+type PermissionChangePayload {
+  targetUserId: UUID!
+  previousRoles: [Role!]
+  newRoles: [Role!]
+  previousPermissions: [VendorPermission!]
+  newPermissions: [VendorPermission!]
+}
+
+# ------------------------------------------------------------------------------
+# Delivery Zone
+# ------------------------------------------------------------------------------
+
+"""
+Geographic delivery zone with fee structure. Used during checkout to
+determine delivery eligibility and fee based on the customer's address.
+Zones are evaluated in priority order; the first matching zone applies.
+"""
+type DeliveryZone implements Node & Timestamped @model @scope(allow: [ADMIN]) {
+  id: UUID!
+
+  name: String! @constraint(minLength: 1, maxLength: 120)
+  """
+  GeoJSON polygon string defining the zone boundary.
+  """
+  boundaryGeoJson: JSON!
+  """
+  Fallback: simple radius from a center point.
+  """
+  centerPoint: GeoPoint
+  radiusMiles: Float @constraint(min: 0)
+
+  deliveryFee: Money!
+  """
+  Minimum order to qualify for delivery in this zone.
+  """
+  minimumOrderAmount: Money
+  """
+  Order subtotal above which delivery is free.
+  """
+  freeDeliveryThreshold: Money
+
+  estimatedDeliveryMinutes: Int @constraint(min: 0)
+  priority: Int! @constraint(min: 0)
+  isActive: Boolean!
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+}
+
+# ------------------------------------------------------------------------------
+# Platform Configuration (admin-managed settings)
+# ------------------------------------------------------------------------------
+
+"""
+Singleton-ish key-value configuration store for platform-wide settings.
+Keys are namespaced (e.g. `checkout.cartTtlHours`, `payout.defaultHoldHours`).
+"""
+type PlatformConfig implements Node & Timestamped & Auditable @model @scope(allow: [ADMIN]) {
+  id: UUID!
+
+  key: String! @constraint(pattern: "^[a-z]+(?:\\.[a-z][a-zA-Z]*)+$", maxLength: 120)
+  value: String! @constraint(maxLength: 5000)
+  valueType: ConfigValueType!
+  description: String @constraint(maxLength: 500)
+
+  createdAt: DateTime! @readOnly
+  updatedAt: DateTime! @readOnly
+  createdBy: UUID @readOnly @serverOnly
+  updatedBy: UUID @readOnly @serverOnly
+}
+
+enum ConfigValueType {
+  STRING
+  INTEGER
+  DECIMAL
+  BOOLEAN
+  JSON
+}
