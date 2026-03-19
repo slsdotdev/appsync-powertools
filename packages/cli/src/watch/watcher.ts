@@ -1,6 +1,8 @@
 import { createLogger, Logger } from "@gqlbase/shared/logger";
 import { FSWatcher } from "chokidar";
+import path from "node:path";
 import pm from "picomatch";
+import { watch } from "chokidar";
 
 export const DEFAULT_IGNORED_DIRS = [
   "**/node_modules/**",
@@ -23,31 +25,37 @@ export async function start(params: StartWatcherParams): Promise<Watcher> {
 
   logger.info("Starting file watcher...");
 
-  const { watch } = await import("chokidar");
-
   const ignoredPatterns = [...DEFAULT_IGNORED_DIRS, ...(params.ignored ?? [])];
 
   const watchPaths = params.paths.map((pattern) => {
     const parsed = pm.scan(pattern);
-    return parsed.base || ".";
+    return path.resolve(process.cwd(), parsed.base || "");
   });
 
   const watcher = watch(watchPaths, {
     ignoreInitial: true,
     ignorePermissionErrors: true,
-    ignored: (path) =>
-      ignoredPatterns.some((dir) => pm.isMatch(path, dir)) ||
-      !params.paths.some((pattern) => pm.isMatch(path, pattern)),
+    ignored: (path) => {
+      return ignoredPatterns.some((dir) => pm.isMatch(path, dir));
+    },
   });
 
   watcher.on("all", async (type, file) => {
-    logger.info(`File ${type}: ${file}`);
+    const isMatch = params.paths.some((pattern) => pm.isMatch(file, pattern));
 
-    try {
-      params.transform();
-    } catch (err) {
-      logger.error("Error during transformation:", err);
+    if (["add", "change", "unlink"].includes(type) && isMatch) {
+      logger.debug(`File ${type}: ${file}`);
+
+      try {
+        params.transform();
+      } catch (err) {
+        logger.error("Error during transformation:", err);
+      }
     }
+  });
+
+  watcher.on("error", (error) => {
+    logger.error("Watcher error:", error);
   });
 
   return watcher;

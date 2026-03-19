@@ -300,15 +300,8 @@ export class ModelPlugin implements ITransformerPlugin {
           continue;
         }
 
-        this.context.logger.debug(
-          `Processing filter input for field ${field.name} of type ${typeName}. Filter input name: ${inputName}`
-        );
-
         if (isListTypeNode(field.type) && (isScalar(typeDef) || isEnum(typeDef))) {
           const listFilterInputName = pascalCase(typeDef.name, "list", "filter", "input");
-          this.context.logger.debug(
-            `Creating list filter input ${listFilterInputName} for list of type ${typeDef.name}`
-          );
 
           if (!this.context.document.hasNode(listFilterInputName)) {
             const listFilterInput = this._createListLikeFilterInput(listFilterInputName, typeName);
@@ -323,10 +316,6 @@ export class ModelPlugin implements ITransformerPlugin {
         }
 
         if (isScalar(typeDef)) {
-          this.context.logger.debug(
-            `Creating scalar filter input ${inputName} for scalar ${typeDef.name}`
-          );
-
           const scalarFilterInput = this._createScalarFilterInput(typeDef, inputName);
 
           if (scalarFilterInput) {
@@ -340,9 +329,6 @@ export class ModelPlugin implements ITransformerPlugin {
         }
 
         if (isEnum(typeDef)) {
-          this.context.logger.debug(
-            `Creating enum filter input ${inputName} for enum ${typeDef.name}`
-          );
           const enumFilterInput = this._createEnumLikeFilterInput(inputName, typeDef.name);
           this.context.document.addNode(enumFilterInput);
 

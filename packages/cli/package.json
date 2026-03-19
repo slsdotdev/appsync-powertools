@@ -28,10 +28,10 @@
     "../../LICENSE"
   ],
   "bin": {
-    "gqlbase": "bin/index.js"
+    "gqlbase": "./bin/index.js"
   },
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
       "default": "./dist/index.js",
