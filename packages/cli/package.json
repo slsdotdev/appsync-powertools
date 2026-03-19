@@ -49,13 +49,13 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@gqlbase/core": "*",
-    "@gqlbase/shared": "*",
+    "@gqlbase/core": "^0.0.2",
+    "@gqlbase/shared": "^0.0.2",
     "cac": "^7.0.0",
     "chokidar": "^5.0.0",
     "tinyglobby": "^0.2.15"
   },
   "devDependencies": {
-    "@gqlbase/plugins": "*"
+    "@gqlbase/plugins": "^0.0.2"
   }
 }

@@ -42,8 +42,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@gqlbase/core": "*",
-    "@gqlbase/shared": "*"
+    "@gqlbase/core": "^0.0.2",
+    "@gqlbase/shared": "^0.0.2"
   },
   "peerDependencies": {
     "graphql": ">=16"
