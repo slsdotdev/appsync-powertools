@@ -22,6 +22,7 @@ import {
   RelationDirective,
   RelationPluginOptions,
 } from "./RelationsPlugin.utils.js";
+import { isListTypeNode } from "../ModelPlugin/ModelPlugin.utils.js";
 
 /**
  *  This plugin is responsible for adding the `@hasOne` and `@hasMany` directives to the schema, which can be used to define relationships between types. It also adds the necessary fields and arguments to the schema to support these directives.
@@ -29,16 +30,32 @@ import {
  * @example
  *
  * ```graphql
+ *
+ * # Before
  * type User {
  *   id: ID!
  *   name: String!
- *   posts: [Post] \@hasMany
+ *   posts: Post `@hasMany(key: "authorId")`
  * }
  *
  * type Post {
  *   id: ID!
  *   title: String!
- *   author: User \@hasOne
+ *   author: User `@hasOne`
+ * }
+ *
+ * # After
+ * type User {
+ *   id: ID!
+ *   name: String!
+ *   posts: [Post]
+ * }
+ *
+ * type Post {
+ *   id: ID!
+ *   title: String!
+ *   authorId: ID
+ *   author: User
  * }
  * ```
  *
@@ -229,7 +246,7 @@ export class RelationsPlugin implements ITransformerPlugin {
         continue;
       }
 
-      if (!(field.type instanceof ListTypeNode)) {
+      if (!isListTypeNode(field.type)) {
         field.setType(ListTypeNode.create(field.type));
       }
     }
