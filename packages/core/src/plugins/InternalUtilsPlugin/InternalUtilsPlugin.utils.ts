@@ -8,10 +8,11 @@ export const InternalDirective = Object.freeze({
 });
 
 export const TypeHintValue = Object.freeze({
-  id: "id",
+  ID: "id",
   STRING: "string",
   NUMBER: "number",
   BOOLEAN: "boolean",
+  OBJECT: "object",
   UNKNOWN: "unknown",
 });
 

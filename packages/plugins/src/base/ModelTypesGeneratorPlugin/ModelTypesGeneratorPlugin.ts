@@ -60,14 +60,17 @@ export class ModelTypesGeneratorPlugin extends TransformerPluginBase {
       const hint = getTypeHint(typeDef);
 
       switch (hint) {
+        case "id":
+          return ts.factory.createIdentifier("string");
         case "string":
           return ts.factory.createIdentifier("string");
         case "number":
           return ts.factory.createIdentifier("number");
         case "boolean":
           return ts.factory.createIdentifier("boolean");
-        case "id":
-          return ts.factory.createIdentifier("string");
+        case "object":
+          return ts.factory.createIdentifier("Record<string, unknown>");
+        case "unknown":
         default: {
           this.context.logger.warn(
             `Unknown type hint for scalar ${typeDef.name}. Defaulting to unknown.`

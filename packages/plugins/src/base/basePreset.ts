@@ -1,4 +1,5 @@
 import { utilsPlugin } from "./UtilitiesPlugin/index.js";
+import { scalarsPlugin } from "./ScalarsPlugin/index.js";
 import { modelPlugin } from "./ModelPlugin/index.js";
 import { relationPlugin } from "./RelationsPlugin/index.js";
 import { schemaGeneratorPlugin } from "./SchemaGeneratorPlugin.js";
@@ -9,9 +10,11 @@ import { modelTypesGeneratorPlugin } from "./ModelTypesGeneratorPlugin/index.js"
  *
  * Inludes:
  * - `UtilitiesPlugin`
+ * - `ScalarsPlugin`
  * - `ModelPlugin`
  * - `RelationsPlugin`
  * - `SchemaGeneratorPlugin`
+ * - `ModelTypesGeneratorPlugin`
  *
  * @returns An array of plugin factories for the base plugins.
  */
@@ -19,6 +22,7 @@ import { modelTypesGeneratorPlugin } from "./ModelTypesGeneratorPlugin/index.js"
 export function basePreset() {
   return [
     utilsPlugin(),
+    scalarsPlugin(),
     modelPlugin(),
     relationPlugin(),
     schemaGeneratorPlugin(),

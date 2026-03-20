@@ -8,51 +8,13 @@
 # ------------------------------------------------------------------------------
 # Custom Scalars
 # ------------------------------------------------------------------------------
-# Follows well-known community scalar specifications where applicable.
-# See: https://the-guild.dev/graphql/scalars
-
-"""
-ISO 8601 date-time string (e.g. `2025-03-18T14:30:00.000Z`).
-"""
-scalar DateTime @gqlbase_typehint(type: string)
-
-"""
-ISO 8601 date string without time (e.g. `2025-03-18`).
-"""
-scalar Date @gqlbase_typehint(type: string)
 
 """
 Fixed-precision decimal encoded as a string to avoid floating-point drift.
 Suitable for monetary values (e.g. `"12.99"`).
 Conforms to IEEE 754 decimal128 semantics.
 """
-scalar Decimal
-
-"""
-RFC 3986 compliant URL string.
-"""
-scalar URL
-
-"""
-RFC 5322 compliant email address.
-"""
-scalar EmailAddress
-
-"""
-E.164 formatted phone number (e.g. `+14155552671`).
-"""
-scalar PhoneNumber
-
-"""
-Arbitrary JSON value. Used sparingly for truly dynamic metadata.
-Prefer explicit types where the shape is known.
-"""
-scalar JSON
-
-"""
-UUID v4 string (e.g. `550e8400-e29b-41d4-a716-446655440000`).
-"""
-scalar UUID @gqlbase_typehint(type: id)
+scalar Decimal @gqlbase_typehint(type: string)
 
 # ------------------------------------------------------------------------------
 # Domain Directives
@@ -81,12 +43,6 @@ directive @constraint(
   min: Float
   max: Float
 ) on FIELD_DEFINITION | INPUT_FIELD_DEFINITION | ARGUMENT_DEFINITION
-
-"""
-Marks a field as deprecated with a reason and an optional removal target.
-Extends the built-in @deprecated with a sunset date for tooling.
-"""
-directive @sunset(reason: String!, removeAfter: Date!) on FIELD_DEFINITION | ENUM_VALUE
 
 """
 Opt-in field-level caching hint. The transformer attaches Cache-Control
