@@ -82,7 +82,7 @@ type Product implements Node & Timestamped & Auditable & SoftDeletable & Version
   seoTitle: String @constraint(maxLength: 70)
   seoDescription: String @constraint(maxLength: 160)
 
-  tags: [String!]!
+  tags: [String] @semanticNonNull(levels: [0, 1])
 
   """
   Seasonal availability window. Null means available year-round.
