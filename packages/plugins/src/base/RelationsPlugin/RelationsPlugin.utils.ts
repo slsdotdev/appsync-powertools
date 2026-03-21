@@ -8,7 +8,7 @@ import {
 import { camelCase } from "@gqlbase/shared/format";
 
 export interface RelationPluginOptions {
-  useConnections?: boolean;
+  usePaginationTypes?: boolean;
 }
 
 export const RelationDirective = {
@@ -36,7 +36,7 @@ export const isRelationField = (field: FieldNode): boolean => {
   return isOneRelationship(field) || isManyRelationship(field);
 };
 
-export const isConnectionNode = (node: DefinitionNode): boolean => {
+export const isPaginationConnection = (node: DefinitionNode): boolean => {
   if (node instanceof ObjectNode) {
     if (!node.name.endsWith("Connection")) return false;
     if (!node.fields || node.fields.length < 2) return false;

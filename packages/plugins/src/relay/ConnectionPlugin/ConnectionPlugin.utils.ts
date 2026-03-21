@@ -1,6 +1,6 @@
 import { DefinitionNode, ObjectNode } from "@gqlbase/core/definition";
 
-export const isConnectionNode = (node: DefinitionNode): boolean => {
+export const isRelayConnection = (node: DefinitionNode): boolean => {
   if (node instanceof ObjectNode) {
     if (!node.name.endsWith("Connection")) return false;
     if (!node.fields || node.fields.length < 2) return false;
@@ -11,7 +11,7 @@ export const isConnectionNode = (node: DefinitionNode): boolean => {
   return false;
 };
 
-export const isEdgeNode = (node: DefinitionNode): boolean => {
+export const isRelayEdge = (node: DefinitionNode): boolean => {
   if (node instanceof ObjectNode) {
     if (!node.name.endsWith("Edge")) return false;
     if (!node.fields || node.fields.length < 2) return false;

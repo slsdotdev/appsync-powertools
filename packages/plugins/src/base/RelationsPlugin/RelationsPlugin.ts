@@ -14,7 +14,7 @@ import { TransformerPluginExecutionError } from "@gqlbase/shared/errors";
 import { pascalCase } from "@gqlbase/shared/format";
 import {
   FieldRelationship,
-  isConnectionNode,
+  isPaginationConnection,
   isManyRelationship,
   isOneRelationship,
   isRelationField,
@@ -73,14 +73,13 @@ import { isListTypeNode } from "../ModelPlugin/ModelPlugin.utils.js";
 export class RelationsPlugin implements ITransformerPlugin {
   readonly name = "RelationsPlugin";
   readonly context: ITransformerContext;
-  private readonly _useConnections: boolean;
+  private readonly options: Required<RelationPluginOptions>;
 
-  constructor(
-    context: ITransformerContext,
-    options: RelationPluginOptions = { useConnections: false }
-  ) {
+  constructor(context: ITransformerContext, options: RelationPluginOptions = {}) {
     this.context = context;
-    this._useConnections = options.useConnections ?? false;
+    this.options = {
+      usePaginationTypes: options.usePaginationTypes ?? false,
+    };
   }
 
   private _getRelationshipTarget(
@@ -131,7 +130,7 @@ export class RelationsPlugin implements ITransformerPlugin {
   private _createFieldConnection(field: FieldNode, target: ObjectNode | InterfaceNode | UnionNode) {
     this._setConnectionArguments(field);
 
-    if (isConnectionNode(target)) {
+    if (isPaginationConnection(target)) {
       return target;
     }
 
@@ -166,7 +165,7 @@ export class RelationsPlugin implements ITransformerPlugin {
   public match(definition: DefinitionNode): boolean {
     if (definition instanceof InterfaceNode || definition instanceof ObjectNode) {
       if (definition.name === "Mutation") return false;
-      if (isConnectionNode(definition)) return false;
+      if (isPaginationConnection(definition)) return false;
       if (!definition.fields?.length) return false;
       return true;
     }
@@ -215,7 +214,7 @@ export class RelationsPlugin implements ITransformerPlugin {
         continue;
       }
 
-      if (this._useConnections) {
+      if (this.options.usePaginationTypes) {
         const connection = this._createFieldConnection(field, relation.target);
         field.setType(NamedTypeNode.create(connection.name));
         continue;

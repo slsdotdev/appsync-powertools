@@ -1,7 +1,7 @@
 export { RelationsPlugin, relationPlugin } from "./RelationsPlugin.js";
 export {
   RelationDirective,
-  isConnectionNode,
+  isPaginationConnection,
   isManyRelationship,
   isOneRelationship,
   isRelationField,

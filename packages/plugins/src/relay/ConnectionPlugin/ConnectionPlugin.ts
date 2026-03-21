@@ -1,5 +1,5 @@
 import { ITransformerContext } from "@gqlbase/core/context";
-import { createPluginFactory, ITransformerPlugin } from "@gqlbase/core/plugins";
+import { createPluginFactory, TransformerPluginBase } from "@gqlbase/core/plugins";
 import {
   DefinitionNode,
   InputValueNode,
@@ -20,14 +20,60 @@ import {
   isValidRelationTarget,
   parseFieldRelation,
 } from "../../base/RelationsPlugin/index.js";
-import { isConnectionNode, isEdgeNode } from "./ConnectionPlugin.utils.js";
+import { isRelayConnection, isRelayEdge } from "./ConnectionPlugin.utils.js";
 
-export class ConnectionPlugin implements ITransformerPlugin {
-  public readonly name = "ConnectionPlugin";
-  readonly context: ITransformerContext;
+/**
+ * Transforms many relationships into Relay compaticale connections, and adds the necessary fields and arguments to support cursor based pagination.
+ *
+ * @example
+ * ```graphql
+ * # Before
+ * type User {
+ *   id: ID!
+ *   name: String!
+ *   posts: Post `@hasMany`
+ * }
+ *
+ * type Post {
+ *   id: ID!
+ *   title: String!
+ * }
+ *
+ * # After
+ * type User {
+ *   id: ID!
+ *   name: String!
+ *   posts: PostConnection
+ * }
+ *
+ * type Post {
+ *   id: ID!
+ *   title: String!
+ * }
+ *
+ * type PostConnection {
+ *   edges: [PostEdge]
+ *   pageInfo: PageInfo
+ * }
+ *
+ * type PostEdge {
+ *   cursor: String
+ *   node: Post
+ * }
+ *
+ * type PageInfo {
+ *   hasNextPage: Boolean
+ *   hasPreviousPage: Boolean
+ *   startCursor: String
+ *   endCursor: String
+ * }
+ *
+ * ```
+ */
 
+export class ConnectionPlugin extends TransformerPluginBase {
   constructor(context: ITransformerContext) {
-    this.context = context;
+    super("ConnectionPlugin", context);
   }
 
   private _getConnectionTarget(object: ObjectNode | InterfaceNode, field: FieldNode) {
@@ -69,7 +115,7 @@ export class ConnectionPlugin implements ITransformerPlugin {
   private _createConnectionTypes(field: FieldNode, connection: FieldRelationship) {
     const { target } = connection;
 
-    if (!isConnectionNode(target)) {
+    if (!isRelayConnection(target)) {
       const connectionTypeName = pascalCase(target.name, "connection");
       const edgeTypeName = pascalCase(target.name, "edge");
 
@@ -114,21 +160,23 @@ export class ConnectionPlugin implements ITransformerPlugin {
     this._createConnectionTypes(field, connection);
   }
 
-  public init(): void {
-    this.context.base.addNode(
-      ObjectNode.create("PageInfo", [
-        FieldNode.create("hasNextPage", NamedTypeNode.create("Boolean")),
-        FieldNode.create("hasPreviousPage", NamedTypeNode.create("Boolean")),
-        FieldNode.create("startCursor", NamedTypeNode.create("String")),
-        FieldNode.create("endCursor", NamedTypeNode.create("String")),
-      ])
-    );
+  public before(): void {
+    if (!this.context.document.hasNode("PageInfo")) {
+      this.context.document.addNode(
+        ObjectNode.create("PageInfo", [
+          FieldNode.create("hasNextPage", NamedTypeNode.create("Boolean")),
+          FieldNode.create("hasPreviousPage", NamedTypeNode.create("Boolean")),
+          FieldNode.create("startCursor", NamedTypeNode.create("String")),
+          FieldNode.create("endCursor", NamedTypeNode.create("String")),
+        ])
+      );
+    }
   }
 
   public match(definition: DefinitionNode): boolean {
     if (definition instanceof InterfaceNode || definition instanceof ObjectNode) {
       if (definition.name === "Mutation") return false;
-      if (isConnectionNode(definition) || isEdgeNode(definition)) return false;
+      if (isRelayConnection(definition) || isRelayEdge(definition)) return false;
       if (!definition.fields?.length) return false;
 
       return true;
