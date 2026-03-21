@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { TransformerContext } from "@gqlbase/core";
 import {
   DirectiveDefinitionNode,
@@ -9,7 +9,7 @@ import {
 } from "@gqlbase/core/definition";
 import { ConnectionPlugin } from "./ConnectionPlugin.js";
 
-const schema = /* GraphQL */ `
+const document = DocumentNode.fromSource(/* GraphQL */ `
   type User {
     id: ID!
     username: String!
@@ -35,16 +35,21 @@ const schema = /* GraphQL */ `
     me: User @hasOne
     todos: Todo @hasMany
   }
-`;
+`);
 
 describe.skip("ConnectionPlugin", () => {
-  const context = new TransformerContext();
-  const plugin = new ConnectionPlugin(context);
-  context.registerPlugin(plugin);
+  let context = new TransformerContext();
+  let plugin = new ConnectionPlugin(context);
+
+  beforeAll(() => {
+    context = new TransformerContext();
+    plugin = new ConnectionPlugin(context);
+    context.registerPlugin(plugin);
+  });
 
   beforeEach(() => {
     context.finishWork();
-    context.startWork(DocumentNode.fromSource(schema));
+    context.startWork(document);
   });
 
   it("adds connection directive definitions", () => {
@@ -75,12 +80,11 @@ describe.skip("ConnectionPlugin", () => {
     });
 
     it("adds connection keys to nodes", () => {
-      expect(
-        (context.document.getNode("Document") as ObjectNode).getField("todoId")
-      ).toBeInstanceOf(FieldNode);
-      expect((context.document.getNode("Message") as ObjectNode).getField("todoId")).toBeInstanceOf(
-        FieldNode
-      );
+      const documentNode = context.document.getNodeOrThrow("Document") as ObjectNode;
+      const messageNode = context.document.getNodeOrThrow("Message") as ObjectNode;
+
+      expect(documentNode.getField("todoId")).toBeInstanceOf(FieldNode);
+      expect(messageNode.getField("todoId")).toBeInstanceOf(FieldNode);
     });
   });
 
