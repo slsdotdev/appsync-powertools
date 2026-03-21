@@ -11,7 +11,7 @@ import {
   ObjectNode,
 } from "@gqlbase/core/definition";
 import { InvalidDefinitionError, TransformerPluginExecutionError } from "@gqlbase/shared/errors";
-import { isModel } from "../base/index.js";
+import { isModel } from "../../base/index.js";
 
 /**
  * Adds a `Node` interface with an `id: ID!` field to the schema and ensures that all types that implement the `Node` interface also have the `id: ID!` field.

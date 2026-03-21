@@ -4,7 +4,6 @@ import {
   DirectiveDefinitionNode,
   DocumentNode,
   EnumNode,
-  FieldNode,
   ObjectNode,
 } from "@gqlbase/core/definition";
 import { ConnectionPlugin } from "./ConnectionPlugin.js";
@@ -56,36 +55,6 @@ describe.skip("ConnectionPlugin", () => {
     expect(context.document.getNode("ConnectionRelationType")).toBeInstanceOf(EnumNode);
     expect(context.document.getNode("hasOne")).toBeInstanceOf(DirectiveDefinitionNode);
     expect(context.document.getNode("hasMany")).toBeInstanceOf(DirectiveDefinitionNode);
-  });
-
-  // describe("on run `before` hook", () => {
-  //   beforeEach(() => plugin.before());
-
-  //   it("adds scalars filter types", () => {
-  //     expect(context.document.getNode("StringFilterInput")).toBeInstanceOf(InputObjectNode);
-  //     expect(context.document.getNode("IntFilterInput")).toBeInstanceOf(InputObjectNode);
-  //     expect(context.document.getNode("FloatFilterInput")).toBeInstanceOf(InputObjectNode);
-  //     expect(context.document.getNode("BooleanFilterInput")).toBeInstanceOf(InputObjectNode);
-  //     expect(context.document.getNode("IDFilterInput")).toBeInstanceOf(InputObjectNode);
-  //     expect(context.document.getNode("SizeFilterInput")).toBeInstanceOf(InputObjectNode);
-  //     expect(context.document.getNode("ListFilterInput")).toBeInstanceOf(InputObjectNode);
-  //     expect(context.document.getNode("SortDirection")).toBeInstanceOf(EnumNode);
-  //   });
-  // });
-
-  describe("on normalize node", () => {
-    beforeEach(() => {
-      plugin.normalize(context.document.getQueryNode());
-      plugin.normalize(context.document.getNode("Todo") as ObjectNode);
-    });
-
-    it("adds connection keys to nodes", () => {
-      const documentNode = context.document.getNodeOrThrow("Document") as ObjectNode;
-      const messageNode = context.document.getNodeOrThrow("Message") as ObjectNode;
-
-      expect(documentNode.getField("todoId")).toBeInstanceOf(FieldNode);
-      expect(messageNode.getField("todoId")).toBeInstanceOf(FieldNode);
-    });
   });
 
   describe("on execute object node", () => {
@@ -142,7 +111,6 @@ describe.skip("ConnectionPlugin", () => {
     beforeEach(() => {
       context.finishWork();
       context.startWork(DocumentNode.fromSource(schema));
-      plugin.normalize(context.document.getQueryNode());
       plugin.execute(context.document.getQueryNode());
     });
 

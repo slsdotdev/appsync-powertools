@@ -11,7 +11,7 @@ import {
   UnionNode,
 } from "@gqlbase/core/definition";
 import { TransformerPluginExecutionError } from "@gqlbase/shared/errors";
-import { camelCase, pascalCase } from "@gqlbase/shared/format";
+import { pascalCase } from "@gqlbase/shared/format";
 import {
   FieldRelationship,
   isConnectionNode,
@@ -19,8 +19,10 @@ import {
   isOneRelationship,
   isRelationField,
   isValidRelationTarget,
+  parseFieldRelation,
   RelationDirective,
   RelationPluginOptions,
+  RelationTarget,
 } from "./RelationsPlugin.utils.js";
 import { isListTypeNode } from "../ModelPlugin/ModelPlugin.utils.js";
 
@@ -81,65 +83,33 @@ export class RelationsPlugin implements ITransformerPlugin {
     this._useConnections = options.useConnections ?? false;
   }
 
-  private _getRelationshipTarget(field: FieldNode) {
-    const fieldType = this.context.document.getNode(field.type.getTypeName());
+  private _getRelationshipTarget(
+    object: ObjectNode | InterfaceNode,
+    field: FieldNode
+  ): RelationTarget {
+    const target = this.context.document.getNode(field.type.getTypeName());
 
-    if (isRelationField(field)) {
-      return fieldType;
+    if (!target || !isValidRelationTarget(target)) {
+      throw new TransformerPluginExecutionError(
+        this.name,
+        `Type ${target?.name ?? "unknwon type"} is not a valid relationship target for ${object.name}.${field.name}`
+      );
     }
 
-    return undefined;
+    return target;
   }
 
   private _getFieldRelation(
     object: ObjectNode | InterfaceNode,
     field: FieldNode
   ): Required<FieldRelationship> | null {
-    const target = this._getRelationshipTarget(field);
-    if (!target) return null;
-
-    if (!isValidRelationTarget(target)) {
-      throw new TransformerPluginExecutionError(
-        this.name,
-        `Type ${target.name} is not a valid relationship target for ${object.name}.${field.name}`
-      );
+    if (!isRelationField(field)) {
+      return null;
     }
 
-    let directive = field.getDirective(RelationDirective.HAS_ONE);
+    const target = this._getRelationshipTarget(object, field);
 
-    if (directive) {
-      if (field.hasDirective(RelationDirective.HAS_MANY)) {
-        throw new TransformerPluginExecutionError(
-          this.name,
-          `Multiple relationship directives detected for ${object.name}.${field.name}`
-        );
-      }
-
-      const args = directive.getArgumentsJSON<{ key: string }>();
-
-      return {
-        type: "oneToOne",
-        target: target,
-        key: args.key ?? camelCase(field.name, "id"),
-      };
-    }
-
-    directive = field.getDirective(RelationDirective.HAS_MANY);
-
-    if (directive) {
-      const args = directive.getArgumentsJSON<{ key: string }>();
-
-      return {
-        type: "oneToMany",
-        target: target,
-        key: args.key ?? camelCase(object.name, "id"),
-      };
-    }
-
-    throw new TransformerPluginExecutionError(
-      this.name,
-      `Could not find connection directive: ${field.name}`
-    );
+    return parseFieldRelation(object, field, target);
   }
 
   private _setRelationKey(node: ObjectNode | InterfaceNode, key: string) {

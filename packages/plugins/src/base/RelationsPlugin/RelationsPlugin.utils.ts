@@ -5,6 +5,7 @@ import {
   ObjectNode,
   UnionNode,
 } from "@gqlbase/core/definition";
+import { camelCase } from "@gqlbase/shared/format";
 
 export interface RelationPluginOptions {
   useConnections?: boolean;
@@ -20,6 +21,8 @@ export interface FieldRelationship {
   target: ObjectNode | InterfaceNode | UnionNode;
   key?: string;
 }
+
+export type RelationTarget = ObjectNode | InterfaceNode | UnionNode;
 
 export const isOneRelationship = (field: FieldNode): boolean => {
   return field.hasDirective(RelationDirective.HAS_ONE);
@@ -44,8 +47,40 @@ export const isConnectionNode = (node: DefinitionNode): boolean => {
   return false;
 };
 
-export const isValidRelationTarget = (
-  node: DefinitionNode
-): node is ObjectNode | InterfaceNode | UnionNode => {
+export const isValidRelationTarget = (node: DefinitionNode): node is RelationTarget => {
   return node instanceof ObjectNode || node instanceof InterfaceNode || node instanceof UnionNode;
+};
+
+export const parseFieldRelation = (
+  object: ObjectNode | InterfaceNode,
+  field: FieldNode,
+  target: RelationTarget
+): Required<FieldRelationship> | null => {
+  if (isOneRelationship(field) && isManyRelationship(field)) {
+    throw new Error(`Multiple relationship directives detected for field: ${field.name}`);
+  }
+
+  if (isOneRelationship(field)) {
+    const directive = field.getDirective(RelationDirective.HAS_ONE);
+    const args = directive?.getArgumentsJSON<{ key: string }>();
+
+    return {
+      type: "oneToOne",
+      target: target,
+      key: args?.key ?? camelCase(field.name, "id"),
+    };
+  }
+
+  if (isManyRelationship(field)) {
+    const directive = field.getDirective(RelationDirective.HAS_MANY);
+    const args = directive?.getArgumentsJSON<{ key: string }>();
+
+    return {
+      type: "oneToMany",
+      target: target,
+      key: args?.key ?? camelCase(object.name, "id"),
+    };
+  }
+
+  return null;
 };
