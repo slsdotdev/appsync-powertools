@@ -1,6 +1,6 @@
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { TransformerContext } from "@gqlbase/core";
-import { DirectiveDefinitionNode, ScalarNode } from "@gqlbase/core/definition";
+import { DirectiveDefinitionNode, DocumentNode, ScalarNode } from "@gqlbase/core/definition";
 import { AppSyncUtilsPlugin } from "./AppSyncUtilsPlugin.js";
 import { AppSyncScalar } from "./AppSyncUtilsPlugin.utils.js";
 
@@ -14,21 +14,32 @@ describe("AppSyncUtilsPlugin", () => {
     context.registerPlugin(plugin);
   });
 
+  beforeEach(() => {
+    context.finishWork();
+    context.startWork(
+      DocumentNode.fromSource(/* GraphQL */ `
+        type Query {
+          date: AWSDate
+        }
+      `)
+    );
+  });
+
   describe("scalars", () => {
     it.each(Object.values(AppSyncScalar))("registers %s scalar", (name) => {
-      const node = context.base.getNode(name);
+      const node = context.document.getNode(name);
       expect(node).toBeInstanceOf(ScalarNode);
     });
 
     it("maps AWSTimestamp to number type hint", () => {
-      const node = context.base.getNode("AWSTimestamp") as ScalarNode;
+      const node = context.document.getNode("AWSTimestamp") as ScalarNode;
       const hint = node.getDirective("gqlbase_typehint");
       expect(hint).toBeDefined();
       expect(hint?.getArgumentsJSON()).toEqual({ type: "number" });
     });
 
     it("maps AWSJSON to object type hint", () => {
-      const node = context.base.getNode("AWSJSON") as ScalarNode;
+      const node = context.document.getNode("AWSJSON") as ScalarNode;
       const hint = node.getDirective("gqlbase_typehint");
       expect(hint).toBeDefined();
       expect(hint?.getArgumentsJSON()).toEqual({ type: "object" });
@@ -46,7 +57,7 @@ describe("AppSyncUtilsPlugin", () => {
       ];
 
       for (const name of stringScalars) {
-        const node = context.base.getNode(name) as ScalarNode;
+        const node = context.document.getNode(name) as ScalarNode;
         const hint = node.getDirective("gqlbase_typehint");
         expect(hint).toBeDefined();
         expect(hint?.getArgumentsJSON()).toEqual({ type: "string" });
@@ -56,39 +67,39 @@ describe("AppSyncUtilsPlugin", () => {
 
   describe("directives", () => {
     it("registers aws_subscribe directive on FIELD_DEFINITION", () => {
-      const node = context.base.getNode("aws_subscribe") as DirectiveDefinitionNode;
+      const node = context.document.getNode("aws_subscribe") as DirectiveDefinitionNode;
       expect(node).toBeInstanceOf(DirectiveDefinitionNode);
       expect(node.locations).toEqual(["FIELD_DEFINITION"]);
     });
 
     it("aws_subscribe has required mutations argument", () => {
-      const node = context.base.getNode("aws_subscribe") as DirectiveDefinitionNode;
+      const node = context.document.getNode("aws_subscribe") as DirectiveDefinitionNode;
       expect(node.hasArgument("mutations")).toBe(true);
       const arg = node.getArgument("mutations");
       expect(arg?.type.getTypeName()).toBe("String");
     });
 
     it("registers aws_auth directive on FIELD_DEFINITION and OBJECT", () => {
-      const node = context.base.getNode("aws_auth") as DirectiveDefinitionNode;
+      const node = context.document.getNode("aws_auth") as DirectiveDefinitionNode;
       expect(node).toBeInstanceOf(DirectiveDefinitionNode);
       expect(node.locations).toContain("FIELD_DEFINITION");
       expect(node.locations).toContain("OBJECT");
     });
 
     it("aws_auth has cognito_groups argument", () => {
-      const node = context.base.getNode("aws_auth") as DirectiveDefinitionNode;
+      const node = context.document.getNode("aws_auth") as DirectiveDefinitionNode;
       expect(node.hasArgument("cognito_groups")).toBe(true);
     });
 
     it("registers aws_cognito_user_pools directive on FIELD_DEFINITION and OBJECT", () => {
-      const node = context.base.getNode("aws_cognito_user_pools") as DirectiveDefinitionNode;
+      const node = context.document.getNode("aws_cognito_user_pools") as DirectiveDefinitionNode;
       expect(node).toBeInstanceOf(DirectiveDefinitionNode);
       expect(node.locations).toContain("FIELD_DEFINITION");
       expect(node.locations).toContain("OBJECT");
     });
 
     it("aws_cognito_user_pools has cognito_groups argument", () => {
-      const node = context.base.getNode("aws_cognito_user_pools") as DirectiveDefinitionNode;
+      const node = context.document.getNode("aws_cognito_user_pools") as DirectiveDefinitionNode;
       expect(node.hasArgument("cognito_groups")).toBe(true);
     });
 
@@ -97,7 +108,7 @@ describe("AppSyncUtilsPlugin", () => {
     it.each(simpleDirectives)(
       "%s is registered on FIELD_DEFINITION and OBJECT with no arguments",
       (name) => {
-        const node = context.base.getNode(name) as DirectiveDefinitionNode;
+        const node = context.document.getNode(name) as DirectiveDefinitionNode;
         expect(node).toBeInstanceOf(DirectiveDefinitionNode);
         expect(node.locations).toContain("FIELD_DEFINITION");
         expect(node.locations).toContain("OBJECT");
