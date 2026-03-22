@@ -1,10 +1,9 @@
 import { defineConfig } from "@gqlbase/cli/config";
-import { basePreset } from "@gqlbase/plugins/base";
-import { relayPreset } from "@gqlbase/plugins/relay";
+import { basePreset, relayPreset, appsyncPreset } from "@gqlbase/plugins";
 
 export default defineConfig({
   source: "src/schema/**/*.graphql",
   output: "generated",
   verbose: true,
-  plugins: [basePreset(), relayPreset()],
+  plugins: [basePreset(), relayPreset(), appsyncPreset()],
 });

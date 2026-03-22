@@ -13,7 +13,7 @@
 Hierarchical product taxonomy. Supports one level of nesting via `parentId`.
 Categories are admin-managed and shared across all vendors.
 """
-type Category implements Node & Timestamped & SoftDeletable
+type Category implements Timestamped & SoftDeletable
   @model
   @scope(allow: [ADMIN, VENDOR, SHOP])
   @cacheControl(maxAge: 7200, scope: PUBLIC) {
@@ -29,11 +29,6 @@ type Category implements Node & Timestamped & SoftDeletable
   parent: Category @hasOne
   children: Category @hasMany(key: "parentId")
   products: Product @hasMany
-
-  createdAt: DateTime! @readOnly
-  updatedAt: DateTime! @readOnly
-  deletedAt: DateTime @readOnly @serverOnly
-  isArchived: Boolean! @readOnly
 }
 
 # ------------------------------------------------------------------------------
@@ -48,7 +43,7 @@ Weight-based products (e.g. meat sold per-pound) set `pricingModel` to
 `PER_UNIT_WEIGHT` and store price-per-unit on variants. The final line-item
 price is computed at checkout from actual weight.
 """
-type Product implements Node & Timestamped & Auditable & SoftDeletable & Versioned
+type Product implements Auditable & SoftDeletable & Versioned
   @model
   @scope(allow: [ADMIN, VENDOR, SHOP]) {
   id: UUID!
@@ -112,13 +107,6 @@ type Product implements Node & Timestamped & Auditable & SoftDeletable & Version
   Lowest current variant price, for display in listing cards.
   """
   startingPrice: Money @clientOnly @readOnly
-
-  createdAt: DateTime! @readOnly
-  updatedAt: DateTime! @readOnly
-  createdBy: UUID @readOnly @serverOnly
-  updatedBy: UUID @readOnly @serverOnly
-  deletedAt: DateTime @readOnly @serverOnly
-  isArchived: Boolean! @readOnly
 }
 
 enum ProductStatus {
