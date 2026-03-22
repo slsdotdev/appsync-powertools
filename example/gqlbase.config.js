@@ -5,5 +5,6 @@ import { relayPreset } from "@gqlbase/plugins/relay";
 export default defineConfig({
   source: "src/schema/**/*.graphql",
   output: "generated",
+  verbose: true,
   plugins: [basePreset(), relayPreset()],
 });
