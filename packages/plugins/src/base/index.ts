@@ -34,7 +34,13 @@ export {
   rfcFeaturesPlugin,
   isSemanticNullable,
 } from "./RfcFeaturesPlugin/index.js";
-export { ScalarsPlugin, scalarsPlugin } from "./ScalarsPlugin/index.js";
+export {
+  ScalarsPlugin,
+  BaseScalar,
+  scalarsPlugin,
+  isBaseScalar,
+  type BaseScalarName,
+} from "./ScalarsPlugin/index.js";
 export { SchemaGeneratorPlugin, schemaGeneratorPlugin } from "./SchemaGeneratorPlugin.js";
 export {
   ModelTypesGeneratorPlugin,
