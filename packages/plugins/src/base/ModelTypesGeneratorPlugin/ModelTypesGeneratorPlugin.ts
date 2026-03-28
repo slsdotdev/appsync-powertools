@@ -14,7 +14,6 @@ import {
 } from "@gqlbase/core/definition";
 import {
   getBuildinScalarTypeKeyword,
-  isOperationNode,
   mergeOptions,
   ModelTypesGeneratorPluginOptions,
 } from "./ModelTypesGeneratorPlugin.utils.js";
@@ -23,6 +22,7 @@ import { isRelationField } from "../RelationsPlugin/RelationsPlugin.utils.js";
 import { isBuildInScalar } from "@gqlbase/shared/definition";
 import { getTypeHint, isInternal } from "@gqlbase/core/plugins";
 import { isSemanticNullable } from "../RfcFeaturesPlugin/RfcFeaturesPlugin.utils.js";
+import { isOperationNode } from "../TypesGeneratorBase/index.js";
 
 /**
  * This plugin generates TypeScript types for all objects defined in the schema.

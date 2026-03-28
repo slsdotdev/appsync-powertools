@@ -10,7 +10,11 @@
     "codegen": "gqlbase --verbose",
     "watch": "gqlbase --watch --verbose"
   },
+  "dependencies": {
+    "@middy-appsync/graphql": "^0.1.1"
+  },
   "devDependencies": {
-    "@gqlbase/cli": "^0.1.0"
+    "@gqlbase/cli": "^0.1.0",
+    "@types/aws-lambda": "^8.10.161"
   }
 }

@@ -19,6 +19,16 @@ const getTypeAtLevel = (type: TypeNode, level: number): TypeNode => {
 };
 
 /**
+ *
+ */
+
+export const isNullable = (type: TypeNode, level = 0): boolean => {
+  const typeAtLevel = getTypeAtLevel(type, level);
+
+  return !(typeAtLevel instanceof NonNullTypeNode);
+};
+
+/**
  * Determines if a field is semantically nullable based on its type and/or the presence of the `@semanticNonNull` directive.
  *
  * @param field Fiel node to check
@@ -28,9 +38,7 @@ const getTypeAtLevel = (type: TypeNode, level: number): TypeNode => {
  */
 
 export const isSemanticNullable = (field: FieldNode, level = 0) => {
-  const typeAtLevel = getTypeAtLevel(field.type, level);
-
-  if (typeAtLevel instanceof NonNullTypeNode) {
+  if (!isNullable(field.type, level)) {
     return false;
   }
 

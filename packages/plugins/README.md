@@ -23,3 +23,18 @@ This is an internal package. Install the main [`gqlbase`](https://www.npmjs.com/
 ## License
 
 MIT
+
+```ts
+declare module "@gqlbase/middy-appsync" {
+  interface Definition {
+    User: {
+      id: { source: User; args: Record<string, never>; result: string };
+      name: { source: User; args: Record<string, never>; result: string };
+      email: { source: User; args: Record<string, never>; result: string };
+    };
+    Query: {
+      user: { source: null; args: Record<string, never>; result: User | null };
+    };
+  }
+}
+```

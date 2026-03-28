@@ -1,5 +1,3 @@
-import { DefinitionNode } from "@gqlbase/core/definition";
-
 export interface ModelTypesGeneratorPluginOptions {
   /**
    * The output file name for the generated types.
@@ -26,12 +24,6 @@ export const mergeOptions = (
     ...DEFAULT_OPTIONS,
     ...options,
   };
-};
-
-const OPERATION_NODE_NAME = ["Query", "Mutation", "Subscription"] as const;
-
-export const isOperationNode = (node: DefinitionNode) => {
-  return OPERATION_NODE_NAME.includes(node.name as (typeof OPERATION_NODE_NAME)[number]);
 };
 
 export const getBuildinScalarTypeKeyword = (typeName: string): string => {

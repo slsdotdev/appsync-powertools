@@ -1,5 +1,6 @@
 import { defineConfig } from "@gqlbase/cli/config";
 import { basePreset, relayPreset, appsyncPreset } from "@gqlbase/plugins";
+import { middyAppSyncGraphQLPlugin } from "@gqlbase/plugins/middy";
 
 export default defineConfig({
   source: "src/schema",
@@ -12,6 +13,9 @@ export default defineConfig({
       scalarMappings: {
         Decimal: "String",
       },
+    }),
+    middyAppSyncGraphQLPlugin({
+      authorizationModes: ["cognito", "iam"],
     }),
   ],
 });

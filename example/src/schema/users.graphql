@@ -43,7 +43,7 @@ type User implements Node & Timestamped & SoftDeletable & Versioned
   locale: Locale!
   timezone: String! @constraint(maxLength: 64)
 
-  addresses: [Address!]! @hasMany
+  addresses: Address @hasMany
   preferences: UserPreferences @hasOne
 
   """
