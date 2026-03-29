@@ -1,5 +1,12 @@
 import { DefinitionNode, FieldNode, ObjectNode } from "@gqlbase/core/definition";
-import { isClientOnly, isReadOnly, isServerOnly, isWriteOnly } from "../UtilitiesPlugin/index.js";
+import {
+  isClientOnly,
+  isCreateOnly,
+  isFilterOnly,
+  isReadOnly,
+  isServerOnly,
+  isUpdateOnly,
+} from "../UtilitiesPlugin/index.js";
 import { isRelationField } from "../RelationsPlugin/index.js";
 
 export interface ModelPluginOptions {
@@ -45,14 +52,27 @@ export const isModel = (definition: DefinitionNode): definition is ObjectNode =>
   return definition instanceof ObjectNode && definition.hasDirective(ModelDirective.MODEL);
 };
 
-export const shouldSkipFieldFromMutationInput = (field: FieldNode): boolean => {
+export const shouldSkipFieldFromInput = (field: FieldNode): boolean => {
   return isReadOnly(field) || isServerOnly(field) || isClientOnly(field) || isRelationField(field);
 };
 
 export const shouldSkipFieldFromFilterInput = (field: FieldNode): boolean => {
-  return isWriteOnly(field) || isServerOnly(field) || isClientOnly(field) || isRelationField(field);
+  return (
+    shouldSkipFieldFromInput(field) ||
+    ((isCreateOnly(field) || isUpdateOnly(field)) && !isFilterOnly(field))
+  );
 };
 
-export const shouldSkipFieldFromSortInput = (field: FieldNode): boolean => {
-  return isServerOnly(field) || isClientOnly(field);
+export const shouldSkipFieldFromCreateInput = (field: FieldNode): boolean => {
+  return (
+    shouldSkipFieldFromInput(field) ||
+    ((isFilterOnly(field) || isUpdateOnly(field)) && !isCreateOnly(field))
+  );
+};
+
+export const shouldSkipFieldFromUpdateInput = (field: FieldNode): boolean => {
+  return (
+    shouldSkipFieldFromInput(field) ||
+    ((isFilterOnly(field) || isCreateOnly(field)) && !isUpdateOnly(field))
+  );
 };

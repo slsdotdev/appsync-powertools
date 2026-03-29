@@ -13,6 +13,7 @@ import {
   ObjectNode,
   UnionNode,
   isListTypeNode,
+  DirectiveNode,
 } from "@gqlbase/core/definition";
 import { TransformerPluginExecutionError } from "@gqlbase/shared/errors";
 import { pascalCase } from "@gqlbase/shared/format";
@@ -29,6 +30,7 @@ import {
   RelationTarget,
   isBelongsToRelationship,
 } from "./RelationsPlugin.utils.js";
+import { UtilityDirective } from "../UtilitiesPlugin/index.js";
 
 /**
  * This plugin is responsible for adding the `@hasOne` and `@hasMany` directives to the schema, which can be used to define relationships between types.
@@ -135,7 +137,14 @@ export class RelationsPlugin implements ITransformerPlugin {
     }
 
     if (!node.hasField(key)) {
-      node.addField(FieldNode.create(key, undefined, undefined, NamedTypeNode.create("ID")));
+      node.addField(
+        FieldNode.create(
+          key,
+          undefined,
+          [DirectiveNode.create(UtilityDirective.WRITE_ONLY)],
+          NamedTypeNode.create("ID")
+        )
+      );
     }
   }
 

@@ -1,5 +1,5 @@
 import { Kind } from "graphql";
-import { DefinitionNode, ScalarNode } from "../../definition/index.js";
+import { ScalarNode } from "../../definition/index.js";
 import { WithDirectivesNode } from "../../definition/WithDirectivesNode.js";
 
 export const InternalDirective = Object.freeze({
@@ -24,7 +24,7 @@ export type TypeHintValueType = (typeof TypeHintValue)[keyof typeof TypeHintValu
  * @returns True if the node is marked as internal, false otherwise.
  */
 
-export const isInternal = (node: DefinitionNode): boolean => {
+export const isInternal = (node: unknown): boolean => {
   if (node instanceof WithDirectivesNode) {
     return node.hasDirective(InternalDirective.INTERNAL);
   }

@@ -18,6 +18,7 @@ import {
 } from "@gqlbase/core/definition";
 import { isSemanticNullable } from "../RfcFeaturesPlugin/index.js";
 import { isRelationField } from "../RelationsPlugin/index.js";
+import { TransformerPluginExecutionError } from "@gqlbase/shared/errors";
 
 export abstract class TypesGeneratorBase extends TransformerPluginBase {
   protected _createTypeNameIdentifier(typeName: string): ts.Identifier {
@@ -217,10 +218,10 @@ export abstract class TypesGeneratorBase extends TransformerPluginBase {
 
   protected _createUnionType(definition: UnionNode) {
     if (!definition.types?.length) {
-      this.context.logger.warn(
-        `Union type ${definition.name} does not have any member types. Skipping type generation.`
+      throw new TransformerPluginExecutionError(
+        this.name,
+        `Union type ${definition.name} must have at least one member type.`
       );
-      return;
     }
 
     const refs = definition.types.map((type) =>
@@ -239,10 +240,10 @@ export abstract class TypesGeneratorBase extends TransformerPluginBase {
 
   protected _createEnumType(definition: EnumNode) {
     if (!definition.values?.length) {
-      this.context.logger.warn(
-        `Enum type ${definition.name} does not have any values. Skipping type generation.`
+      throw new TransformerPluginExecutionError(
+        this.name,
+        `Enum type ${definition.name} must have at least one value.`
       );
-      return;
     }
 
     const members = definition.values.map((value) =>

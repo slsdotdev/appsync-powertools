@@ -14,31 +14,31 @@ Platform user account. A single person may hold multiple roles simultaneously
 and driven by the access token's active scope.
 """
 type User implements Node & Timestamped & SoftDeletable & Versioned
-  @model(operations: [write])
+  @model(operations: [WRITE])
   @scope(allow: [ADMIN, VENDOR, SHOP]) {
   id: UUID!
-  version: Int! @readOnly
+  version: Int @readOnly @semanticNonNull
 
-  email: EmailAddress! @constraint(maxLength: 320)
+  email: EmailAddress @semanticNonNull @constraint(maxLength: 320)
   phone: PhoneNumber
-  passwordHash: String! @serverOnly @writeOnly
+  passwordHash: String! @serverOnly
 
-  firstName: String! @constraint(minLength: 1, maxLength: 100)
-  lastName: String! @constraint(minLength: 1, maxLength: 100)
+  firstName: String @semanticNonNull @constraint(minLength: 1, maxLength: 100)
+  lastName: String @semanticNonNull @constraint(minLength: 1, maxLength: 100)
   displayName: String @constraint(maxLength: 150)
 
   """
   Computed full name: `firstName + " " + lastName`.
   """
-  fullName: String @clientOnly @readOnly
+  fullName: String @clientOnly
 
   avatarUrl: URL
-  roles: [Role!]! @readOnly @scope(allow: [ADMIN])
+  roles: [Role] @semanticNonNull(levels: [0, 1]) @readOnly @scope(allow: [ADMIN])
 
   emailVerifiedAt: DateTime @readOnly
   phoneVerifiedAt: DateTime @readOnly
-  lastLoginAt: DateTime @readOnly
-  loginCount: Int! @readOnly @scope(allow: [ADMIN])
+  lastLoginAt: DateTime @serverOnly
+  loginCount: Int @serverOnly @scope(allow: [ADMIN])
 
   locale: Locale
   timezone: String @constraint(maxLength: 64)
@@ -51,9 +51,9 @@ type User implements Node & Timestamped & SoftDeletable & Versioned
   """
   vendorMembership: VendorMember @hasOne @scope(allow: [ADMIN, VENDOR])
 
-  createdAt: DateTime! @readOnly
-  updatedAt: DateTime! @readOnly
-  deletedAt: DateTime @readOnly @serverOnly
+  createdAt: DateTime @semanticNonNull @readOnly
+  updatedAt: DateTime @semanticNonNull @readOnly
+  deletedAt: DateTime @serverOnly
   isArchived: Boolean @readOnly
 }
 
@@ -76,23 +76,20 @@ type Address implements Node & Timestamped @model @scope(allow: [ADMIN, VENDOR, 
   id: UUID!
   userId: UUID! @serverOnly
 
-  label: AddressLabel!
+  label: AddressLabel @semanticNonNull
   recipientName: String @constraint(maxLength: 200)
-  line1: String! @constraint(minLength: 1, maxLength: 200)
+  line1: String @semanticNonNull @constraint(minLength: 1, maxLength: 200)
   line2: String @constraint(maxLength: 200)
-  city: String! @constraint(maxLength: 120)
-  state: String! @constraint(maxLength: 120)
-  postalCode: String! @constraint(pattern: "^[A-Za-z0-9 -]{3,10}$")
-  countryCode: String! @constraint(pattern: "^[A-Z]{2}$")
+  city: String @semanticNonNull @constraint(maxLength: 120)
+  state: String @semanticNonNull @constraint(maxLength: 120)
+  postalCode: String @semanticNonNull @constraint(pattern: "^[A-Za-z0-9 -]{3,10}$")
+  countryCode: String @semanticNonNull @constraint(pattern: "^[A-Z]{2}$")
   location: GeoPoint
 
-  isDefault: Boolean!
+  isDefault: Boolean @semanticNonNull
   deliveryNotes: String @constraint(maxLength: 500)
 
-  user: User! @hasOne
-
-  createdAt: DateTime! @readOnly
-  updatedAt: DateTime! @readOnly
+  user: User @belongsTo @semanticNonNull
 }
 
 enum AddressLabel {
@@ -112,22 +109,21 @@ Split from User to keep the core record lean.
 """
 type UserPreferences implements Node @model(operations: [write]) @scope(allow: [ADMIN, SHOP]) {
   id: UUID!
-  userId: UUID! @serverOnly
 
-  emailNotifications: Boolean!
-  smsNotifications: Boolean!
-  pushNotifications: Boolean!
+  emailNotifications: Boolean @semanticNonNull
+  smsNotifications: Boolean @semanticNonNull
+  pushNotifications: Boolean @semanticNonNull
 
-  marketingOptIn: Boolean!
+  marketingOptIn: Boolean @semanticNonNull
   marketingOptInAt: DateTime @readOnly
 
-  preferredCurrency: Currency!
-  preferredLocale: Locale!
+  preferredCurrency: Currency @semanticNonNull
+  preferredLocale: Locale @semanticNonNull
 
-  dietaryTags: [DietaryTag!]!
-  allergenAlerts: [Allergen!]!
+  dietaryTags: [DietaryTag] @semanticNonNull(levels: [0, 1])
+  allergenAlerts: [Allergen] @semanticNonNull(levels: [0, 1])
 
-  user: User! @hasOne
+  user: User @belongsTo @semanticNonNull
 }
 
 enum DietaryTag {

@@ -1,36 +1,34 @@
 import ts from "typescript";
-import { createPluginFactory, ITransformerContext, TransformerPluginBase } from "@gqlbase/core";
+import { createPluginFactory, ITransformerContext } from "@gqlbase/core";
 import { createFileHeaders } from "@gqlbase/shared/codegen";
 import {
   DefinitionNode,
-  EnumNode,
-  FieldNode,
   InterfaceNode,
+  isDirectiveDefinitionNode,
   isEnumNode,
-  isObjectLike,
+  isInputObjectNode,
+  isInterfaceNode,
+  isObjectNode,
   isOperationNode,
   isScalarNode,
-  ListTypeNode,
-  NonNullTypeNode,
+  isUnionNode,
   ObjectNode,
-  TypeNode,
-  UnionNode,
 } from "@gqlbase/core/definition";
 import {
-  getBuildinScalarTypeKeyword,
   mergeOptions,
   ModelTypesGeneratorPluginOptions,
 } from "./ModelTypesGeneratorPlugin.utils.js";
 import { isRelationField } from "../RelationsPlugin/RelationsPlugin.utils.js";
-import { isBuildInScalar } from "@gqlbase/shared/definition";
-import { getTypeHint, isInternal } from "@gqlbase/core/plugins";
+import { isInternal } from "@gqlbase/core/plugins";
 import { isSemanticNullable } from "../RfcFeaturesPlugin/RfcFeaturesPlugin.utils.js";
+import { TypesGeneratorBase } from "../TypesGeneratorBase/TypesGeneratorBase.js";
+import { isServerOnly, isWriteOnly } from "../UtilitiesPlugin/UtilitiesPlugin.utils.js";
 
 /**
  * This plugin generates TypeScript types for all objects defined in the schema.
  */
 
-export class ModelTypesGeneratorPlugin extends TransformerPluginBase {
+export class ModelTypesGeneratorPlugin extends TypesGeneratorBase {
   private nodes: ts.Node[] = [];
   private options: Required<ModelTypesGeneratorPluginOptions>;
 
@@ -57,68 +55,16 @@ export class ModelTypesGeneratorPlugin extends TransformerPluginBase {
     return printer.printList(ts.ListFormat.MultiLine, ts.factory.createNodeArray(this.nodes), file);
   }
 
-  private _createTypeNameIdentifier(typeName: string): ts.Identifier {
-    if (isBuildInScalar(typeName)) {
-      return ts.factory.createIdentifier(getBuildinScalarTypeKeyword(typeName));
-    }
-
-    const typeDef = this.context.document.getNodeOrThrow(typeName);
-
-    if (isScalarNode(typeDef)) {
-      const hint = getTypeHint(typeDef);
-
-      switch (hint) {
-        case "id":
-          return ts.factory.createIdentifier("string");
-        case "string":
-          return ts.factory.createIdentifier("string");
-        case "number":
-          return ts.factory.createIdentifier("number");
-        case "boolean":
-          return ts.factory.createIdentifier("boolean");
-        case "object":
-          return ts.factory.createIdentifier("Record<string, unknown>");
-        case "unknown":
-        default: {
-          this.context.logger.warn(
-            `Unknown type hint for scalar ${typeDef.name}. Defaulting to unknown.`
-          );
-          return ts.factory.createIdentifier("unknown");
-        }
-      }
-    }
-
-    return ts.factory.createIdentifier(typeName);
-  }
-
-  private _createValueTypeReference(field: FieldNode, fieldType: TypeNode, level = 0): ts.TypeNode {
-    if (fieldType instanceof NonNullTypeNode) {
-      return this._createValueTypeReference(field, fieldType.type, level);
-    }
-
-    if (fieldType instanceof ListTypeNode) {
-      const elementType = this._createValueTypeReference(field, fieldType.type, level + 1);
-      const arrayType = ts.factory.createArrayTypeNode(elementType);
-
-      return isSemanticNullable(field, level)
-        ? ts.factory.createTypeReferenceNode("Maybe", [arrayType])
-        : arrayType;
-    }
-
-    const baseType = ts.factory.createTypeReferenceNode(
-      this._createTypeNameIdentifier(fieldType.name)
-    );
-
-    return isSemanticNullable(field, level)
-      ? ts.factory.createTypeReferenceNode("Maybe", [baseType])
-      : baseType;
-  }
-
-  private _createFieldMembers(definition: ObjectNode | InterfaceNode) {
+  protected _createFieldMembers(definition: ObjectNode | InterfaceNode) {
     const members: ts.TypeElement[] = [];
 
     for (const field of definition.fields ?? []) {
-      if (isRelationField(field)) {
+      if (
+        isInternal(field) ||
+        isWriteOnly(field) ||
+        isServerOnly(field) ||
+        isRelationField(field)
+      ) {
         continue;
       }
 
@@ -149,77 +95,6 @@ export class ModelTypesGeneratorPlugin extends TransformerPluginBase {
     return members;
   }
 
-  private _createObjectType(definition: ObjectNode) {
-    const members = this._createFieldMembers(definition);
-
-    const objectType = ts.factory.createTypeAliasDeclaration(
-      /*modifiers*/ [ts.factory.createModifier(ts.SyntaxKind.ExportKeyword)],
-      ts.factory.createIdentifier(definition.name),
-      /*typeParameters*/ undefined,
-      ts.factory.createTypeLiteralNode(members)
-    );
-
-    this.nodes.push(objectType);
-  }
-
-  private _createInterfaceType(definition: InterfaceNode) {
-    const members = this._createFieldMembers(definition);
-
-    const interfaceType = ts.factory.createInterfaceDeclaration(
-      /*modifiers*/ [ts.factory.createModifier(ts.SyntaxKind.ExportKeyword)],
-      ts.factory.createIdentifier(definition.name),
-      /*typeParameters*/ undefined,
-      /*heritageClauses*/ undefined,
-      members
-    );
-
-    this.nodes.push(interfaceType);
-  }
-
-  private _createEnumType(definition: EnumNode) {
-    if (!definition.values?.length) {
-      this.context.logger.warn(
-        `Enum type ${definition.name} does not have any values. Skipping type generation.`
-      );
-      return;
-    }
-
-    const members = definition.values.map((value) =>
-      ts.factory.createLiteralTypeNode(ts.factory.createStringLiteral(value.name))
-    );
-
-    const enumType = ts.factory.createTypeAliasDeclaration(
-      /*modifiers*/ [ts.factory.createModifier(ts.SyntaxKind.ExportKeyword)],
-      ts.factory.createIdentifier(definition.name),
-      /*typeParameters*/ undefined,
-      ts.factory.createUnionTypeNode(members)
-    );
-
-    this.nodes.push(enumType);
-  }
-
-  private _createUnionType(definition: UnionNode) {
-    if (!definition.types?.length) {
-      this.context.logger.warn(
-        `Union type ${definition.name} does not have any member types. Skipping type generation.`
-      );
-      return;
-    }
-
-    const refs = definition.types.map((type) =>
-      ts.factory.createTypeReferenceNode(ts.factory.createIdentifier(type.name))
-    );
-
-    const unionType = ts.factory.createTypeAliasDeclaration(
-      /*modifiers*/ [ts.factory.createModifier(ts.SyntaxKind.ExportKeyword)],
-      ts.factory.createIdentifier(definition.name),
-      /*typeParameters*/ undefined,
-      ts.factory.createUnionTypeNode(refs)
-    );
-
-    this.nodes.push(unionType);
-  }
-
   public before() {
     const headers = createFileHeaders();
 
@@ -240,27 +115,32 @@ export class ModelTypesGeneratorPlugin extends TransformerPluginBase {
 
   public match(definition: DefinitionNode): boolean {
     return (
-      (isObjectLike(definition) || isEnumNode(definition)) &&
       !isOperationNode(definition) &&
-      !isInternal(definition)
+      !isInternal(definition) &&
+      !isScalarNode(definition) &&
+      !isDirectiveDefinitionNode(definition)
     );
   }
 
   public generate(definition: DefinitionNode) {
-    if (definition instanceof InterfaceNode) {
-      return this._createInterfaceType(definition);
+    if (isInterfaceNode(definition)) {
+      return this.nodes.push(this._createInterfaceType(definition));
     }
 
-    if (definition instanceof ObjectNode) {
-      return this._createObjectType(definition);
+    if (isObjectNode(definition)) {
+      return this.nodes.push(this._createObjectType(definition));
     }
 
-    if (definition instanceof UnionNode) {
-      return this._createUnionType(definition);
+    if (isUnionNode(definition)) {
+      return this.nodes.push(this._createUnionType(definition));
     }
 
-    if (definition instanceof EnumNode) {
-      return this._createEnumType(definition);
+    if (isInputObjectNode(definition)) {
+      return this.nodes.push(this._createInputObjectType(definition));
+    }
+
+    if (isEnumNode(definition)) {
+      return this.nodes.push(this._createEnumType(definition));
     }
   }
 

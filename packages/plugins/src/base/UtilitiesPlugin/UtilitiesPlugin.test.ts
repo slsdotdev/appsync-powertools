@@ -28,6 +28,7 @@ describe("UtilitiesPlugin", () => {
           createOnlyField: String! @createOnly
           updateOnlyField: String! @updateOnly
           readOnlyField: String! @readOnly
+          composedField: String! @writeOnly @filterOnly
         }
 
         type Query {
@@ -59,13 +60,14 @@ describe("UtilitiesPlugin", () => {
     const userNode = context.document.getNode("User") as ObjectNode;
     plugin.cleanup(userNode);
 
+    expect(userNode.hasField("readOnlyField")).toBeTruthy();
     expect(userNode.hasField("password")).toBeFalsy();
     expect(userNode.hasField("secret")).toBeFalsy();
     expect(userNode.hasField("clientData")).toBeTruthy();
-    expect(userNode.hasField("filterField")).toBeFalsy();
-    expect(userNode.hasField("createOnlyField")).toBeFalsy();
-    expect(userNode.hasField("updateOnlyField")).toBeFalsy();
-    expect(userNode.hasField("readOnlyField")).toBeTruthy();
+    expect(userNode.hasField("filterField")).toBeTruthy();
+    expect(userNode.hasField("createOnlyField")).toBeTruthy();
+    expect(userNode.hasField("updateOnlyField")).toBeTruthy();
+    expect(userNode.hasField("composedField")).toBeFalsy();
   });
 
   it("removes utility directive definitions on after hook", () => {

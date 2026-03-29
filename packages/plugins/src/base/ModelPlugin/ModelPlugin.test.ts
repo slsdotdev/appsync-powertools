@@ -48,6 +48,11 @@ describe("ModelPlugin", () => {
     it(`adds model directive directive definition`, () => {
       expect(context.document.getNode("model")).toBeInstanceOf(DirectiveDefinitionNode);
       expect(context.document.getNode("ModelOperation")).toBeInstanceOf(EnumNode);
+    });
+
+    it("adds scalar filter notes and utility types", () => {
+      plugin.before();
+
       expect(context.document.getNode("IDFilterInput")).toBeInstanceOf(InputObjectNode);
       expect(context.document.getNode("StringFilterInput")).toBeInstanceOf(InputObjectNode);
       expect(context.document.getNode("IntFilterInput")).toBeInstanceOf(InputObjectNode);

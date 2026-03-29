@@ -31,8 +31,9 @@ import {
   ModelOperation,
   ModelPluginOptions,
   OperationType,
+  shouldSkipFieldFromCreateInput,
   shouldSkipFieldFromFilterInput,
-  shouldSkipFieldFromMutationInput,
+  shouldSkipFieldFromUpdateInput,
 } from "./ModelPlugin.utils.js";
 import { isManyRelationship } from "../RelationsPlugin/RelationsPlugin.utils.js";
 
@@ -140,7 +141,11 @@ export class ModelPlugin implements ITransformerPlugin {
     const args = directive.getArgumentsJSON<{ operations?: OperationType[] }>();
 
     if (args.operations && args.operations.length > 0) {
-      return this._expandOperations(args.operations);
+      return this._expandOperations(
+        args.operations
+          .map((op) => ModelOperation[op as keyof typeof ModelOperation])
+          .filter(Boolean) as OperationType[]
+      );
     }
 
     return this._defaultOperations;
@@ -415,7 +420,8 @@ export class ModelPlugin implements ITransformerPlugin {
   private _createMutationInput(
     model: ObjectNode,
     inputName: string,
-    requiredFields: string[] = []
+    requiredFields: string[] = [],
+    verb: "create" | "update" | "upsert"
   ) {
     const mutationInput = this.context.document.getNode(inputName);
 
@@ -430,7 +436,11 @@ export class ModelPlugin implements ITransformerPlugin {
       const input = InputObjectNode.create(inputName);
 
       for (const field of model.fields ?? []) {
-        if (shouldSkipFieldFromMutationInput(field)) {
+        if (verb === "create" && shouldSkipFieldFromCreateInput(field)) {
+          continue;
+        }
+
+        if (verb !== "create" && shouldSkipFieldFromUpdateInput(field)) {
           continue;
         }
 
@@ -487,7 +497,7 @@ export class ModelPlugin implements ITransformerPlugin {
           const inputName = pascalCase(fieldTypeName, "input");
 
           if (!this.context.document.hasNode(inputName)) {
-            this._createMutationInput(typeDef, inputName);
+            this._createMutationInput(typeDef, inputName, [], verb);
           }
 
           input.addField(
@@ -608,7 +618,7 @@ export class ModelPlugin implements ITransformerPlugin {
           "ModelOperation",
           undefined,
           [DirectiveNode.create(InternalDirective.INTERNAL)],
-          Object.values(ModelOperation)
+          Object.keys(ModelOperation)
         )
       )
       .addNode(
@@ -625,14 +635,41 @@ export class ModelPlugin implements ITransformerPlugin {
             ),
           ]
         )
-      )
-      .addNode(this._createIDLikeFilterInput("IDFilterInput", "ID"))
-      .addNode(this._createStringLikeFilterInput("StringFilterInput", "String"))
-      .addNode(this._createNumberLikeFilterInput("IntFilterInput", "Int"))
-      .addNode(this._createNumberLikeFilterInput("FloatFilterInput", "Float"))
-      .addNode(this._createBooleanLikeFilterInput("BooleanFilterInput", "Boolean"))
-      .addNode(this._createSizeFilterInput())
-      .addNode(this._createSortDirection());
+      );
+  }
+
+  public before() {
+    if (!this.context.document.hasNode("IDFilterInput")) {
+      this.context.document.addNode(this._createIDLikeFilterInput("IDFilterInput", "ID"));
+    }
+
+    if (!this.context.document.hasNode("StringFilterInput")) {
+      this.context.document.addNode(
+        this._createStringLikeFilterInput("StringFilterInput", "String")
+      );
+    }
+
+    if (!this.context.document.hasNode("IntFilterInput")) {
+      this.context.document.addNode(this._createNumberLikeFilterInput("IntFilterInput", "Int"));
+    }
+
+    if (!this.context.document.hasNode("FloatFilterInput")) {
+      this.context.document.addNode(this._createNumberLikeFilterInput("FloatFilterInput", "Float"));
+    }
+
+    if (!this.context.document.hasNode("BooleanFilterInput")) {
+      this.context.document.addNode(
+        this._createBooleanLikeFilterInput("BooleanFilterInput", "Boolean")
+      );
+    }
+
+    if (!this.context.document.hasNode("SizeFilterInput")) {
+      this.context.document.addNode(this._createSizeFilterInput());
+    }
+
+    if (!this.context.document.hasNode("SortDirection")) {
+      this.context.document.addNode(this._createSortDirection());
+    }
   }
 
   public match(definition: DefinitionNode) {
@@ -678,7 +715,8 @@ export class ModelPlugin implements ITransformerPlugin {
           this._createMutationInput(
             definition,
             pascalCase(verb, definition.name, "input"),
-            verb === "update" ? ["id"] : []
+            verb === "update" ? ["id"] : [],
+            verb
           );
           continue;
         default:
