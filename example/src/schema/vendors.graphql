@@ -299,8 +299,8 @@ type MarketVendorAssignment implements Node & Timestamped @model @scope(allow: [
   effectiveUntil: Date
   status: AssignmentStatus!
 
-  vendor: Vendor! @hasOne
-  marketLocation: MarketLocation! @hasOne
+  vendor: Vendor! @belongsTo(key: "vendorId")
+  marketLocation: MarketLocation! @belongsTo(key: "marketLocationId")
 
   createdAt: DateTime! @readOnly
   updatedAt: DateTime! @readOnly

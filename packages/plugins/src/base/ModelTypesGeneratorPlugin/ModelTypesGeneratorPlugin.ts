@@ -6,6 +6,10 @@ import {
   EnumNode,
   FieldNode,
   InterfaceNode,
+  isEnumNode,
+  isObjectLike,
+  isOperationNode,
+  isScalarNode,
   ListTypeNode,
   NonNullTypeNode,
   ObjectNode,
@@ -17,12 +21,10 @@ import {
   mergeOptions,
   ModelTypesGeneratorPluginOptions,
 } from "./ModelTypesGeneratorPlugin.utils.js";
-import { isEnum, isObjectLike, isScalar } from "../ModelPlugin/ModelPlugin.utils.js";
 import { isRelationField } from "../RelationsPlugin/RelationsPlugin.utils.js";
 import { isBuildInScalar } from "@gqlbase/shared/definition";
 import { getTypeHint, isInternal } from "@gqlbase/core/plugins";
 import { isSemanticNullable } from "../RfcFeaturesPlugin/RfcFeaturesPlugin.utils.js";
-import { isOperationNode } from "../TypesGeneratorBase/index.js";
 
 /**
  * This plugin generates TypeScript types for all objects defined in the schema.
@@ -62,7 +64,7 @@ export class ModelTypesGeneratorPlugin extends TransformerPluginBase {
 
     const typeDef = this.context.document.getNodeOrThrow(typeName);
 
-    if (isScalar(typeDef)) {
+    if (isScalarNode(typeDef)) {
       const hint = getTypeHint(typeDef);
 
       switch (hint) {
@@ -238,7 +240,7 @@ export class ModelTypesGeneratorPlugin extends TransformerPluginBase {
 
   public match(definition: DefinitionNode): boolean {
     return (
-      (isObjectLike(definition) || isEnum(definition)) &&
+      (isObjectLike(definition) || isEnumNode(definition)) &&
       !isOperationNode(definition) &&
       !isInternal(definition)
     );

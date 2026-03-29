@@ -1,9 +1,16 @@
 import ts from "typescript";
 import { createPluginFactory, ITransformerContext } from "@gqlbase/core";
-import { DefinitionNode, FieldNode, ObjectNode } from "@gqlbase/core/definition";
+import {
+  DefinitionNode,
+  FieldNode,
+  isNullableTypeNode,
+  isOperationNode,
+  isScalarNode,
+  ObjectNode,
+} from "@gqlbase/core/definition";
 import { isInternal } from "@gqlbase/core/plugins";
 import { createFileHeaders } from "@gqlbase/shared/codegen";
-import { TypesGeneratorBase, isNullable, isOperationNode, isScalar } from "../../base/index.js";
+import { TypesGeneratorBase } from "../../base/index.js";
 import {
   getAuthModeIdentityType,
   type MiddyAppSyncGraphQLPluginOptions,
@@ -228,12 +235,12 @@ export class MiddyAppSyncGraphQLPlugin extends TypesGeneratorBase {
     for (const arg of field.arguments) {
       const maybeNode = this.context.document.getNode(arg.type.getTypeName());
 
-      if (maybeNode && !isScalar(maybeNode)) {
+      if (maybeNode && !isScalarNode(maybeNode)) {
         this.typeImports.add(arg.type.getTypeName());
       }
 
       const typeNode = this._createInputValueTypeReference(arg, arg.type);
-      const questionToken = isNullable(arg.type)
+      const questionToken = isNullableTypeNode(arg.type)
         ? ts.factory.createToken(ts.SyntaxKind.QuestionToken)
         : undefined;
 
@@ -258,7 +265,7 @@ export class MiddyAppSyncGraphQLPlugin extends TypesGeneratorBase {
   private _createFieldResult(field: FieldNode) {
     const maybeNode = this.context.document.getNode(field.type.getTypeName());
 
-    if (maybeNode && !isScalar(maybeNode)) {
+    if (maybeNode && !isScalarNode(maybeNode)) {
       this.typeImports.add(field.type.getTypeName());
     }
 

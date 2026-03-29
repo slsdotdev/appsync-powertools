@@ -5,10 +5,14 @@ import {
   FieldNode,
   InputValueNode,
   InterfaceNode,
+  isInterfaceNode,
+  isObjectNode,
+  isUnionNode,
   ListTypeNode,
   NamedTypeNode,
   ObjectNode,
   UnionNode,
+  isListTypeNode,
 } from "@gqlbase/core/definition";
 import { TransformerPluginExecutionError } from "@gqlbase/shared/errors";
 import { pascalCase } from "@gqlbase/shared/format";
@@ -23,9 +27,8 @@ import {
   RelationDirective,
   RelationPluginOptions,
   RelationTarget,
+  isBelongsToRelationship,
 } from "./RelationsPlugin.utils.js";
-import { isListTypeNode } from "../ModelPlugin/ModelPlugin.utils.js";
-import { isOperationNode } from "../TypesGeneratorBase/TypeGeneratorBase.utils.js";
 
 /**
  * This plugin is responsible for adding the `@hasOne` and `@hasMany` directives to the schema, which can be used to define relationships between types.
@@ -102,7 +105,7 @@ export class RelationsPlugin implements ITransformerPlugin {
   private _getFieldRelation(
     object: ObjectNode | InterfaceNode,
     field: FieldNode
-  ): Required<FieldRelationship> | null {
+  ): FieldRelationship | null {
     if (!isRelationField(field)) {
       return null;
     }
@@ -112,7 +115,25 @@ export class RelationsPlugin implements ITransformerPlugin {
     return parseFieldRelation(object, field, target);
   }
 
-  private _setRelationKey(node: ObjectNode | InterfaceNode, key: string) {
+  private _setRelationKey(node: ObjectNode | InterfaceNode | UnionNode, key: string) {
+    if (isUnionNode(node)) {
+      for (const type of node.types ?? []) {
+        const unionType = this.context.document.getNodeOrThrow(type.getTypeName());
+
+        if (isObjectNode(unionType) || isInterfaceNode(unionType)) {
+          this._setRelationKey(unionType, key);
+          continue;
+        }
+
+        throw new TransformerPluginExecutionError(
+          this.name,
+          `Invalid relation union target: ${node.name}`
+        );
+      }
+
+      return;
+    }
+
     if (!node.hasField(key)) {
       node.addField(FieldNode.create(key, undefined, undefined, NamedTypeNode.create("ID")));
     }
@@ -170,6 +191,14 @@ export class RelationsPlugin implements ITransformerPlugin {
       )
       .addNode(
         DirectiveDefinitionNode.create(
+          RelationDirective.BELONGS_TO,
+          undefined,
+          ["FIELD_DEFINITION"],
+          [InputValueNode.create("key", undefined, undefined, "String")]
+        )
+      )
+      .addNode(
+        DirectiveDefinitionNode.create(
           RelationDirective.HAS_MANY,
           undefined,
           ["FIELD_DEFINITION"],
@@ -197,29 +226,12 @@ export class RelationsPlugin implements ITransformerPlugin {
         continue;
       }
 
-      if (relation.type === "oneToOne") {
-        if (!isOperationNode(definition)) {
+      if (relation.key) {
+        if (isBelongsToRelationship(field)) {
           this._setRelationKey(definition, relation.key);
+          continue;
         }
 
-        continue;
-      }
-
-      if (relation.target instanceof UnionNode) {
-        for (const type of relation.target.types ?? []) {
-          const unionType = this.context.document.getNode(type.getTypeName());
-
-          if (unionType instanceof ObjectNode || unionType instanceof InterfaceNode) {
-            this._setRelationKey(unionType, relation.key);
-            continue;
-          }
-
-          throw new TransformerPluginExecutionError(
-            this.name,
-            `Invalid relation union target: ${relation.target.name}`
-          );
-        }
-      } else {
         this._setRelationKey(relation.target, relation.key);
       }
     }

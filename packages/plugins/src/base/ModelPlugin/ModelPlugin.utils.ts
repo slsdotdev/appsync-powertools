@@ -1,15 +1,4 @@
-import {
-  DefinitionNode,
-  EnumNode,
-  FieldNode,
-  InterfaceNode,
-  ListTypeNode,
-  NonNullTypeNode,
-  ObjectNode,
-  ScalarNode,
-  TypeNode,
-  UnionNode,
-} from "@gqlbase/core/definition";
+import { DefinitionNode, FieldNode, ObjectNode } from "@gqlbase/core/definition";
 import { isClientOnly, isReadOnly, isServerOnly, isWriteOnly } from "../UtilitiesPlugin/index.js";
 import { isRelationField } from "../RelationsPlugin/index.js";
 
@@ -54,28 +43,6 @@ export const DEFAULT_WRITE_OPERATIONS = [
 
 export const isModel = (definition: DefinitionNode): definition is ObjectNode => {
   return definition instanceof ObjectNode && definition.hasDirective(ModelDirective.MODEL);
-};
-
-export const isObjectLike = (
-  type: DefinitionNode
-): type is ObjectNode | InterfaceNode | UnionNode => {
-  return type instanceof ObjectNode || type instanceof InterfaceNode || type instanceof UnionNode;
-};
-
-export const isListTypeNode = (node: TypeNode): boolean => {
-  if (node instanceof NonNullTypeNode && node.type instanceof ListTypeNode) {
-    return true;
-  }
-
-  return node instanceof ListTypeNode;
-};
-
-export const isScalar = (node: DefinitionNode): node is ScalarNode => {
-  return node instanceof ScalarNode;
-};
-
-export const isEnum = (node: DefinitionNode): node is EnumNode => {
-  return node instanceof EnumNode;
 };
 
 export const shouldSkipFieldFromMutationInput = (field: FieldNode): boolean => {

@@ -1,4 +1,4 @@
-export { TypesGeneratorBase, isOperationNode } from "./TypesGeneratorBase/index.js";
+export { TypesGeneratorBase } from "./TypesGeneratorBase/index.js";
 export {
   ModelPlugin,
   type ModelPluginOptions,
@@ -6,9 +6,6 @@ export {
   ModelOperation,
   modelPlugin,
   isModel,
-  isObjectLike,
-  isScalar,
-  isEnum,
 } from "./ModelPlugin/index.js";
 export {
   RelationsPlugin,
@@ -36,7 +33,6 @@ export {
   RfcFeaturesPlugin,
   RfcDirective,
   rfcFeaturesPlugin,
-  isNullable,
   isSemanticNullable,
 } from "./RfcFeaturesPlugin/index.js";
 export {

@@ -102,7 +102,7 @@ export class ConnectionPlugin extends TransformerPluginBase {
   private _getFieldConnection(
     object: ObjectNode | InterfaceNode,
     field: FieldNode
-  ): Required<FieldRelationship> | null {
+  ): FieldRelationship | null {
     if (!isRelationField(field)) {
       return null;
     }

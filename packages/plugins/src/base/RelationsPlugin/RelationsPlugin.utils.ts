@@ -2,6 +2,8 @@ import {
   DefinitionNode,
   FieldNode,
   InterfaceNode,
+  isObjectLike,
+  isOperationNode,
   ObjectNode,
   UnionNode,
 } from "@gqlbase/core/definition";
@@ -14,12 +16,13 @@ export interface RelationPluginOptions {
 export const RelationDirective = {
   HAS_ONE: "hasOne",
   HAS_MANY: "hasMany",
+  BELONGS_TO: "belongsTo",
 } as const;
 
 export interface FieldRelationship {
   type: "oneToOne" | "oneToMany";
   target: ObjectNode | InterfaceNode | UnionNode;
-  key?: string;
+  key?: string | null;
 }
 
 export type RelationTarget = ObjectNode | InterfaceNode | UnionNode;
@@ -32,8 +35,12 @@ export const isManyRelationship = (field: FieldNode): boolean => {
   return field.hasDirective(RelationDirective.HAS_MANY);
 };
 
+export const isBelongsToRelationship = (field: FieldNode): boolean => {
+  return field.hasDirective(RelationDirective.BELONGS_TO);
+};
+
 export const isRelationField = (field: FieldNode): boolean => {
-  return isOneRelationship(field) || isManyRelationship(field);
+  return isOneRelationship(field) || isBelongsToRelationship(field) || isManyRelationship(field);
 };
 
 export const isPaginationConnection = (node: DefinitionNode): boolean => {
@@ -48,37 +55,69 @@ export const isPaginationConnection = (node: DefinitionNode): boolean => {
 };
 
 export const isValidRelationTarget = (node: DefinitionNode): node is RelationTarget => {
-  return node instanceof ObjectNode || node instanceof InterfaceNode || node instanceof UnionNode;
+  return isObjectLike(node);
 };
 
 export const parseFieldRelation = (
   object: ObjectNode | InterfaceNode,
   field: FieldNode,
   target: RelationTarget
-): Required<FieldRelationship> | null => {
-  if (isOneRelationship(field) && isManyRelationship(field)) {
+): FieldRelationship | null => {
+  const relationships = [
+    isOneRelationship(field),
+    isManyRelationship(field),
+    isBelongsToRelationship(field),
+  ].filter(Boolean);
+
+  if (relationships.length > 1) {
     throw new Error(`Multiple relationship directives detected for field: ${field.name}`);
   }
 
   if (isOneRelationship(field)) {
     const directive = field.getDirective(RelationDirective.HAS_ONE);
     const args = directive?.getArgumentsJSON<{ key: string }>();
+    let key = args?.key ?? null;
+
+    if (!key && !isOperationNode(object)) {
+      key = camelCase(object.name, "id");
+    }
 
     return {
       type: "oneToOne",
       target: target,
-      key: args?.key ?? camelCase(field.name, "id"),
+      key,
+    };
+  }
+
+  if (isBelongsToRelationship(field)) {
+    const directive = field.getDirective(RelationDirective.BELONGS_TO);
+    const args = directive?.getArgumentsJSON<{ key: string }>();
+    let key = args?.key ?? null;
+
+    if (!key && !isOperationNode(object)) {
+      key = camelCase(field.name, "id");
+    }
+
+    return {
+      type: "oneToOne",
+      target: target,
+      key,
     };
   }
 
   if (isManyRelationship(field)) {
     const directive = field.getDirective(RelationDirective.HAS_MANY);
     const args = directive?.getArgumentsJSON<{ key: string }>();
+    let key = args?.key ?? null;
+
+    if (!key && !isOperationNode(object)) {
+      key = camelCase(object.name, "id");
+    }
 
     return {
       type: "oneToMany",
       target: target,
-      key: args?.key ?? camelCase(object.name, "id"),
+      key,
     };
   }
 

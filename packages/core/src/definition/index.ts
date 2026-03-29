@@ -27,4 +27,8 @@ export {
   isObjectNode,
   isScalarNode,
   isUnionNode,
+  isObjectLike,
+  isOperationNode,
+  isListTypeNode,
+  isNullableTypeNode,
 } from "./utils.js";

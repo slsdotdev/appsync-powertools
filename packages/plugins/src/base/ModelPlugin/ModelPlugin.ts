@@ -9,6 +9,10 @@ import {
   InputObjectNode,
   InputValueNode,
   InterfaceNode,
+  isEnumNode,
+  isListTypeNode,
+  isObjectLike,
+  isScalarNode,
   ListTypeNode,
   NamedTypeNode,
   NonNullTypeNode,
@@ -22,11 +26,7 @@ import { isBuildInScalar } from "@gqlbase/shared/definition";
 import {
   DEFAULT_READ_OPERATIONS,
   DEFAULT_WRITE_OPERATIONS,
-  isEnum,
-  isListTypeNode,
   isModel,
-  isObjectLike,
-  isScalar,
   ModelDirective,
   ModelOperation,
   ModelPluginOptions,
@@ -346,7 +346,7 @@ export class ModelPlugin implements ITransformerPlugin {
           continue;
         }
 
-        if (isListTypeNode(field.type) && (isScalar(typeDef) || isEnum(typeDef))) {
+        if (isListTypeNode(field.type) && (isScalarNode(typeDef) || isEnumNode(typeDef))) {
           const listFilterInputName = pascalCase(typeDef.name, "list", "filter", "input");
 
           if (!this.context.document.hasNode(listFilterInputName)) {
@@ -366,7 +366,7 @@ export class ModelPlugin implements ITransformerPlugin {
           continue;
         }
 
-        if (isScalar(typeDef)) {
+        if (isScalarNode(typeDef)) {
           const scalarFilterInput = this._createScalarFilterInput(typeDef, inputName);
 
           if (scalarFilterInput) {
@@ -384,7 +384,7 @@ export class ModelPlugin implements ITransformerPlugin {
           continue;
         }
 
-        if (isEnum(typeDef)) {
+        if (isEnumNode(typeDef)) {
           const enumFilterInput = this._createEnumLikeFilterInput(inputName, typeDef.name);
           this.context.document.addNode(enumFilterInput);
 

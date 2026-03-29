@@ -1,32 +1,8 @@
-import { FieldNode, ListTypeNode, NonNullTypeNode, TypeNode } from "@gqlbase/core/definition";
+import { FieldNode, isNullableTypeNode } from "@gqlbase/core/definition";
 
 export const RfcDirective = {
   SEMANTIC_NON_NULL: "semanticNonNull",
 } as const;
-
-/**
- * Unwraps a type to the given depth level.
- * Only `ListTypeNode` counts as a level — `NonNullTypeNode` is
- * a modifier at the same depth and is skipped transparently.
- */
-const getTypeAtLevel = (type: TypeNode, level: number): TypeNode => {
-  if (level <= 0) return type;
-
-  if (type instanceof NonNullTypeNode) return getTypeAtLevel(type.type, level);
-  if (type instanceof ListTypeNode) return getTypeAtLevel(type.type, level - 1);
-
-  return type;
-};
-
-/**
- *
- */
-
-export const isNullable = (type: TypeNode, level = 0): boolean => {
-  const typeAtLevel = getTypeAtLevel(type, level);
-
-  return !(typeAtLevel instanceof NonNullTypeNode);
-};
 
 /**
  * Determines if a field is semantically nullable based on its type and/or the presence of the `@semanticNonNull` directive.
@@ -38,7 +14,7 @@ export const isNullable = (type: TypeNode, level = 0): boolean => {
  */
 
 export const isSemanticNullable = (field: FieldNode, level = 0) => {
-  if (!isNullable(field.type, level)) {
+  if (!isNullableTypeNode(field.type, level)) {
     return false;
   }
 

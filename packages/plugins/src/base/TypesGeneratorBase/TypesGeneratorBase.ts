@@ -8,14 +8,15 @@ import {
   InputObjectNode,
   InputValueNode,
   InterfaceNode,
+  isNullableTypeNode,
+  isScalarNode,
   ListTypeNode,
   NonNullTypeNode,
   ObjectNode,
   TypeNode,
   UnionNode,
 } from "@gqlbase/core/definition";
-import { isScalar } from "../ModelPlugin/ModelPlugin.utils.js";
-import { isNullable, isSemanticNullable } from "../RfcFeaturesPlugin/index.js";
+import { isSemanticNullable } from "../RfcFeaturesPlugin/index.js";
 import { isRelationField } from "../RelationsPlugin/index.js";
 
 export abstract class TypesGeneratorBase extends TransformerPluginBase {
@@ -35,7 +36,7 @@ export abstract class TypesGeneratorBase extends TransformerPluginBase {
 
     const typeDef = this.context.document.getNodeOrThrow(typeName);
 
-    if (isScalar(typeDef)) {
+    if (isScalarNode(typeDef)) {
       const hint = getTypeHint(typeDef);
 
       switch (hint) {
@@ -102,7 +103,7 @@ export abstract class TypesGeneratorBase extends TransformerPluginBase {
       const elementType = this._createInputValueTypeReference(field, fieldType.type, level + 1);
       const arrayType = ts.factory.createArrayTypeNode(elementType);
 
-      return isNullable(field.type, level)
+      return isNullableTypeNode(field.type, level)
         ? ts.factory.createTypeReferenceNode("Maybe", [arrayType])
         : arrayType;
     }
@@ -111,7 +112,7 @@ export abstract class TypesGeneratorBase extends TransformerPluginBase {
       this._createTypeNameIdentifier(fieldType.name)
     );
 
-    return isNullable(field.type, level)
+    return isNullableTypeNode(field.type, level)
       ? ts.factory.createTypeReferenceNode("Maybe", [baseType])
       : baseType;
   }
@@ -155,7 +156,7 @@ export abstract class TypesGeneratorBase extends TransformerPluginBase {
     const members: ts.TypeElement[] = [];
 
     for (const field of definition.fields ?? []) {
-      const questionToken = isNullable(field.type)
+      const questionToken = isNullableTypeNode(field.type)
         ? ts.factory.createToken(ts.SyntaxKind.QuestionToken)
         : undefined;
 

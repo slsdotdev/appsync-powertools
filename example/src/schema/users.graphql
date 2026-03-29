@@ -110,7 +110,7 @@ enum AddressLabel {
 Per-user settings and preference flags. One-to-one with User.
 Split from User to keep the core record lean.
 """
-type UserPreferences implements Node @model(operations: [UPDATE]) @scope(allow: [ADMIN, SHOP]) {
+type UserPreferences implements Node @model(operations: [write]) @scope(allow: [ADMIN, SHOP]) {
   id: UUID!
   userId: UUID! @serverOnly
 
