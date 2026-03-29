@@ -1,5 +1,6 @@
 import { ITransformerContext } from "../context/ITransformerContext.js";
-import { DefinitionNode } from "../definition/DocumentNode.js";
+import { DefinitionNode } from "../definition/index.js";
+
 import { ITransformerPlugin } from "./ITransformerPlugin.js";
 
 /**
