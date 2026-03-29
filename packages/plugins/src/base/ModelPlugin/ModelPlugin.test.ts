@@ -29,9 +29,7 @@ const document = DocumentNode.fromSource(/* GraphQL */ `
   }
 `);
 
-const context = new TransformerContext({
-  outputDirectory: "test-output",
-});
+const context = new TransformerContext();
 
 const plugin = new ModelPlugin(context);
 context.registerPlugin(plugin);
@@ -64,6 +62,7 @@ describe("ModelPlugin", () => {
     beforeEach(() => {
       context.finishWork();
       context.startWork(document);
+      plugin.normalize(context.document.getNode("Model") as ObjectNode);
       plugin.execute(context.document.getNode("Model") as ObjectNode);
     });
 
