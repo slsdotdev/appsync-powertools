@@ -1,4 +1,4 @@
-import { DefinitionNode, FieldNode, ObjectNode } from "@gqlbase/core/definition";
+import { DefinitionNode, FieldNode, isObjectNode, ObjectNode } from "@gqlbase/core/definition";
 import {
   isClientOnly,
   isCreateOnly,
@@ -48,8 +48,8 @@ export const DEFAULT_WRITE_OPERATIONS = [
   "delete",
 ] as const satisfies OperationType[];
 
-export const isModel = (definition: DefinitionNode): definition is ObjectNode => {
-  return definition instanceof ObjectNode && definition.hasDirective(ModelDirective.MODEL);
+export const isModel = (node: DefinitionNode): node is ObjectNode => {
+  return isObjectNode(node) && node.hasDirective(ModelDirective.MODEL);
 };
 
 export const shouldSkipFieldFromInput = (field: FieldNode): boolean => {

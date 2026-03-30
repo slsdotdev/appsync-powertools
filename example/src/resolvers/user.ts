@@ -8,8 +8,6 @@ export const queryMe = createQueryResolver({
       throw new Error("Unauthorized");
     }
 
-    // In a real application, you would fetch the user from your database using the identity information.
-    // For this example, we'll return a mock user object.
     return {
       id: identity.sub,
       firstName: "John",
@@ -24,16 +22,20 @@ export const queryMe = createQueryResolver({
   },
 });
 
-const userFullName = createResolver({
+const userAddresses = createResolver({
   typeName: "User",
-  fieldName: "fullName",
-  resolve: async ({ source }) => {
-    if (source.fullName) {
-      return source.fullName;
-    }
-
-    return `${source.firstName} ${source.lastName}`;
+  fieldName: "addresses",
+  resolve: async () => {
+    return {
+      edges: [],
+      pageInfo: {
+        hasNextPage: false,
+        hasPreviousPage: false,
+        startCursor: null,
+        endCursor: null,
+      },
+    };
   },
 });
 
-export default defineResolvers(queryMe, userFullName);
+export default defineResolvers(queryMe, userAddresses);

@@ -4,17 +4,19 @@ import {
   DefinitionNode,
   FieldNode,
   isNullableTypeNode,
+  isObjectNode,
   isOperationNode,
   isScalarNode,
   ObjectNode,
 } from "@gqlbase/core/definition";
 import { isInternal } from "@gqlbase/core/plugins";
 import { createFileHeaders } from "@gqlbase/shared/codegen";
-import { TypesGeneratorBase } from "../../base/index.js";
+import { isModel, isRelationField, TypesGeneratorBase } from "../../base/index.js";
 import {
   getAuthModeIdentityType,
   type MiddyAppSyncGraphQLPluginOptions,
 } from "./MiddyAppSyncGraphQLPlugin.utils.js";
+
 /**
  * Generated definition types and templates for `@middy-appsync/graphql`.
  * @example
@@ -72,7 +74,10 @@ export class MiddyAppSyncGraphQLPlugin extends TypesGeneratorBase {
   constructor(context: ITransformerContext, options: MiddyAppSyncGraphQLPluginOptions = {}) {
     super("MiddyAppSyncGraphQLPlugin", context);
 
-    this.options = options;
+    this.options = {
+      ...options,
+      relationsOnly: options.relationsOnly ?? true,
+    };
   }
 
   private _createModuleDeclaration() {
@@ -297,14 +302,25 @@ export class MiddyAppSyncGraphQLPlugin extends TypesGeneratorBase {
   }
 
   public match(node: DefinitionNode): boolean {
-    return node instanceof ObjectNode && !isInternal(node);
+    if (this.options.relationsOnly) {
+      return (isOperationNode(node) || isModel(node)) && !isInternal(node);
+    }
+
+    return isObjectNode(node) && !isInternal(node);
   }
 
   public generate(node: ObjectNode) {
     const members: ts.TypeElement[] = [];
 
     for (const field of node.fields ?? []) {
-      members.push(this._createFieldDefinition(node, field));
+      if (!this.options.relationsOnly) {
+        members.push(this._createFieldDefinition(node, field));
+        continue;
+      }
+
+      if (isOperationNode(node) || isRelationField(field)) {
+        members.push(this._createFieldDefinition(node, field));
+      }
     }
 
     this.definitions.push(
