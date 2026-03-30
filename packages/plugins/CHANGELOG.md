@@ -1,5 +1,14 @@
 # @gqlbase/plugins
 
+## 0.1.3
+
+### Patch Changes
+
+- ef8127f: Bug fixes and improvements
+- 5c99042: relations only typegen for MyddyAppSyncGraphQLPlugin option
+  - @gqlbase/core@0.1.3
+  - @gqlbase/shared@0.1.3
+
 ## 0.1.2
 
 ### Patch Changes
