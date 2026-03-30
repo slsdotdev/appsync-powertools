@@ -1,5 +1,12 @@
 # @gqlbase/cli
 
+## 0.1.3
+
+### Patch Changes
+
+- @gqlbase/core@0.1.3
+- @gqlbase/shared@0.1.3
+
 ## 0.1.2
 
 ### Patch Changes
