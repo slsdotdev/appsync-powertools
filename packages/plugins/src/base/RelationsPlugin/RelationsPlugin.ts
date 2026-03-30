@@ -272,6 +272,10 @@ export class RelationsPlugin implements ITransformerPlugin {
         field.removeDirective(RelationDirective.HAS_ONE);
       }
 
+      if (isBelongsToRelationship(field)) {
+        field.removeDirective(RelationDirective.BELONGS_TO);
+      }
+
       if (isManyRelationship(field)) {
         field.removeDirective(RelationDirective.HAS_MANY);
       }
@@ -281,6 +285,7 @@ export class RelationsPlugin implements ITransformerPlugin {
   after(): void {
     this.context.document
       .removeNode(RelationDirective.HAS_ONE)
+      .removeNode(RelationDirective.BELONGS_TO)
       .removeNode(RelationDirective.HAS_MANY);
   }
 }

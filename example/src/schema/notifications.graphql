@@ -18,15 +18,15 @@ type Notification implements Timestamped @model @scope(allow: [ADMIN, VENDOR, SH
   id: UUID!
   recipientUserId: UUID! @serverOnly
 
-  channel: NotificationChannel!
-  category: NotificationCategory!
-  priority: NotificationPriority!
+  channel: NotificationChannel @semanticNonNull
+  category: NotificationCategory @semanticNonNull
+  priority: NotificationPriority @semanticNonNull
 
-  title: String! @constraint(maxLength: 200)
-  body: String! @constraint(maxLength: 1000)
+  title: String @semanticNonNull @constraint(maxLength: 200)
+  body: String @semanticNonNull @constraint(maxLength: 1000)
 
   " Structured payload for client-side rendering and deep-linking. "
-  payload: NotificationPayload!
+  payload: NotificationPayload @semanticNonNull
 
   readAt: DateTime
   dismissedAt: DateTime
@@ -34,12 +34,9 @@ type Notification implements Timestamped @model @scope(allow: [ADMIN, VENDOR, SH
 
   " External delivery identifier (e.g. email message-id, push receipt). "
   deliveryRef: String @serverOnly @constraint(maxLength: 200)
-  deliveryStatus: DeliveryStatus! @readOnly
+  deliveryStatus: DeliveryStatus @semanticNonNull @readOnly
 
   expiresAt: DateTime
-
-  createdAt: DateTime! @readOnly
-  updatedAt: DateTime! @readOnly
 }
 
 enum NotificationChannel {
@@ -95,34 +92,34 @@ union NotificationPayload =
 Order status changed — for customer-facing notifications.
 """
 type OrderStatusPayload {
-  orderId: UUID!
-  orderNumber: String!
+  orderId: UUID @semanticNonNull
+  orderNumber: String @semanticNonNull
   previousStatus: OrderStatus
-  newStatus: OrderStatus!
+  newStatus: OrderStatus @semanticNonNull
 }
 
 """
 Vendor order update — for vendor-facing notifications.
 """
 type VendorOrderPayload {
-  vendorOrderId: UUID!
-  referenceNumber: String!
-  orderId: UUID!
-  event: OrderEvent!
+  vendorOrderId: UUID @semanticNonNull
+  referenceNumber: String @semanticNonNull
+  orderId: UUID @semanticNonNull
+  event: OrderEvent @semanticNonNull
 }
 
 """
 New review or review response posted.
 """
 type ReviewPayload {
-  reviewId: UUID!
-  productId: UUID!
-  productName: String!
+  reviewId: UUID @semanticNonNull
+  productId: UUID @semanticNonNull
+  productName: String @semanticNonNull
   rating: Int
   """
   True if this is a vendor-response notification, false for new reviews.
   """
-  isResponse: Boolean!
+  isResponse: Boolean @semanticNonNull
 }
 
 """
@@ -132,8 +129,8 @@ type PaymentPayload {
   transactionId: UUID
   payoutId: UUID
   orderId: UUID
-  amount: Money!
-  event: PaymentEvent!
+  amount: Money @semanticNonNull
+  event: PaymentEvent @semanticNonNull
 }
 
 enum PaymentEvent {
@@ -148,10 +145,10 @@ enum PaymentEvent {
 Product back in stock, price drop, season start, low-stock vendor alert.
 """
 type ProductAlertPayload {
-  productId: UUID!
+  productId: UUID @semanticNonNull
   variantId: UUID
-  productName: String!
-  alertType: ProductAlertType!
+  productName: String @semanticNonNull
+  alertType: ProductAlertType @semanticNonNull
   previousPrice: Money
   newPrice: Money
 }
@@ -171,8 +168,8 @@ Promotional campaigns — coupons, flash sales, seasonal events.
 type PromotionPayload {
   couponId: UUID
   couponCode: String
-  title: String!
-  description: String!
+  title: String @semanticNonNull
+  description: String @constraint(maxLength: 1000)
   expiresAt: DateTime
   deepLinkUrl: URL
 }
@@ -181,7 +178,7 @@ type PromotionPayload {
 Platform maintenance, policy updates, feature announcements.
 """
 type SystemPayload {
-  severity: SystemSeverity!
+  severity: SystemSeverity @semanticNonNull
   actionUrl: URL
   actionLabel: String
 }
@@ -202,11 +199,10 @@ all notifications; rows here represent explicit opt-outs or overrides.
 """
 type NotificationPreference @model @scope(allow: [ADMIN, SHOP]) {
   id: UUID!
-  userId: UUID! @serverOnly
 
   category: NotificationCategory @semanticNonNull
   channel: NotificationChannel @semanticNonNull
   enabled: Boolean @semanticNonNull
 
-  user: User @hasOne @semanticNonNull
+  user: User @belongsTo @semanticNonNull
 }

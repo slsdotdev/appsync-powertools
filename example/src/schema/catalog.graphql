@@ -19,11 +19,11 @@ type Category implements Timestamped & SoftDeletable
   @cacheControl(maxAge: 7200, scope: PUBLIC) {
   id: UUID!
 
-  name: String! @constraint(minLength: 1, maxLength: 120)
-  slug: String! @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 80)
+  name: String @semanticNonNull @constraint(minLength: 1, maxLength: 120)
+  slug: String @semanticNonNull @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 80)
   description: String @constraint(maxLength: 1000)
   iconUrl: URL
-  sortOrder: Int!
+  sortOrder: Int @semanticNonNull
 
   parentId: UUID @serverOnly
   parent: Category @belongsTo
@@ -48,28 +48,26 @@ type Product implements Auditable & SoftDeletable & Versioned
   @scope(allow: [ADMIN, VENDOR, SHOP]) {
   id: UUID!
   version: Int! @readOnly
-  vendorId: UUID! @serverOnly
-  categoryId: UUID! @serverOnly
 
-  name: String! @constraint(minLength: 1, maxLength: 200)
-  slug: String! @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 120)
+  name: String @semanticNonNull @constraint(minLength: 1, maxLength: 200)
+  slug: String @semanticNonNull @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 120)
   description: String @constraint(maxLength: 5000)
   shortDescription: String @constraint(maxLength: 280)
 
-  status: ProductStatus!
-  visibility: ProductVisibility!
-  pricingModel: PricingModel!
+  status: ProductStatus @semanticNonNull
+  visibility: ProductVisibility @semanticNonNull
+  pricingModel: PricingModel @semanticNonNull
 
   """
   Primary display image.
   """
   featuredImageUrl: URL
-  imageUrls: [URL!]!
+  imageUrls: [URL] @semanticNonNull(levels: [0, 1])
 
   """
   Structured attributes for faceted search and display.
   """
-  attributes: ProductAttributes!
+  attributes: ProductAttributes @semanticNonNull
 
   """
   SEO and social-sharing metadata. Null fields fall back to product name/description.
@@ -88,20 +86,20 @@ type Product implements Auditable & SoftDeletable & Versioned
   """
   Whether this product can be pre-ordered before season starts.
   """
-  preOrderEnabled: Boolean!
+  preOrderEnabled: Boolean @semanticNonNull
   preOrderLeadDays: Int @constraint(min: 1, max: 90)
 
-  vendor: Vendor! @belongsTo
-  category: Category! @belongsTo
-  variants: [ProductVariant!]! @hasMany
-  reviews: [Review!]! @hasMany
-  priceHistory: [PriceHistoryEntry!]! @hasMany @scope(allow: [ADMIN, VENDOR])
+  vendor: Vendor @belongsTo @semanticNonNull
+  category: Category @belongsTo @semanticNonNull
+  variants: ProductVariant @hasMany @semanticNonNull
+  reviews: Review @hasMany @semanticNonNull
+  priceHistory: PriceHistoryEntry @hasMany @semanticNonNull @scope(allow: [ADMIN, VENDOR])
 
   """
   Aggregated rating. Computed at read-time from reviews.
   """
   averageRating: Float @clientOnly @readOnly
-  reviewCount: Int! @clientOnly @readOnly
+  reviewCount: Int @clientOnly @readOnly @semanticNonNull
 
   """
   Lowest current variant price, for display in listing cards.
@@ -146,9 +144,9 @@ Structured product metadata for filtering, display, and compliance.
 Not all fields apply to every product category.
 """
 type ProductAttributes {
-  allergens: [Allergen!]!
-  dietaryTags: [DietaryTag!]!
-  certifications: [VendorCertification!]!
+  allergens: [Allergen] @semanticNonNull(levels: [0, 1])
+  dietaryTags: [DietaryTag] @semanticNonNull(levels: [0, 1])
+  certifications: [VendorCertification] @semanticNonNull(levels: [0, 1])
 
   """
   Unit of weight for weight-priced items (e.g. LB, KG).
@@ -220,16 +218,17 @@ type ProductVariant implements Node & Timestamped & Versioned
   @model
   @scope(allow: [ADMIN, VENDOR, SHOP]) {
   id: UUID!
-  version: Int! @readOnly
-  productId: UUID! @serverOnly
 
   """
   Display label (e.g. "1 lb bag", "Half dozen").
   """
-  name: String! @constraint(minLength: 1, maxLength: 120)
-  sku: String! @constraint(pattern: "^[A-Z0-9-]{3,40}$") @scope(allow: [ADMIN, VENDOR])
+  name: String @semanticNonNull @constraint(minLength: 1, maxLength: 120)
+  sku: String
+    @semanticNonNull
+    @constraint(pattern: "^[A-Z0-9-]{3,40}$")
+    @scope(allow: [ADMIN, VENDOR])
 
-  price: Money!
+  price: Money @semanticNonNull
 
   """
   Compare-at price for sale display. Must be greater than `price` when set.
@@ -247,14 +246,11 @@ type ProductVariant implements Node & Timestamped & Versioned
   weight: Float @constraint(min: 0)
   weightUnit: WeightUnit
 
-  isDefault: Boolean!
-  sortOrder: Int!
+  isDefault: Boolean @semanticNonNull
+  sortOrder: Int @semanticNonNull
 
-  product: Product! @hasOne
+  product: Product @belongsTo @semanticNonNull
   inventory: InventoryRecord @hasOne(key: "variantId")
-
-  createdAt: DateTime! @readOnly
-  updatedAt: DateTime! @readOnly
 }
 
 # ------------------------------------------------------------------------------
@@ -269,62 +265,55 @@ type InventoryRecord implements Node & Timestamped & Versioned
   @model
   @scope(allow: [ADMIN, VENDOR]) {
   id: UUID!
-  version: Int! @readOnly
-  variantId: UUID! @serverOnly
 
   """
   Units currently available for sale.
   """
-  quantityOnHand: Int! @constraint(min: 0)
+  quantityOnHand: Int @semanticNonNull @constraint(min: 0)
   """
   Units reserved by pending orders (not yet fulfilled).
   """
-  quantityReserved: Int! @constraint(min: 0) @readOnly
+  quantityReserved: Int @semanticNonNull @constraint(min: 0) @readOnly
   """
   Threshold below which low-stock alerts fire.
   """
-  lowStockThreshold: Int! @constraint(min: 0)
+  lowStockThreshold: Int @semanticNonNull @constraint(min: 0)
 
-  trackInventory: Boolean!
+  trackInventory: Boolean @semanticNonNull
 
   """
   Whether the product can still be purchased when out of stock.
   """
-  allowBackorder: Boolean!
+  allowBackorder: Boolean @semanticNonNull
   backorderLimit: Int @constraint(min: 0)
 
   """
   Computed: quantityOnHand - quantityReserved.
   """
-  quantityAvailable: Int! @clientOnly @readOnly
+  quantityAvailable: Int @semanticNonNull @clientOnly @readOnly
 
-  variant: ProductVariant! @hasOne
-  adjustments: [InventoryAdjustment!]! @hasMany
-
-  createdAt: DateTime! @readOnly
-  updatedAt: DateTime! @readOnly
+  variant: ProductVariant @belongsTo @semanticNonNull
+  adjustments: [InventoryAdjustment] @hasMany @semanticNonNull @scope(allow: [ADMIN, VENDOR])
 }
 
 """
 Immutable audit log for every inventory change. Enables full traceability
 from receiving through sale.
 """
-type InventoryAdjustment implements Node & Timestamped @model @scope(allow: [ADMIN, VENDOR]) {
+type InventoryAdjustment implements Node & Timestamped
+  @model(operations: [READ, CREATE])
+  @scope(allow: [ADMIN, VENDOR]) {
   id: UUID!
-  inventoryRecordId: UUID! @serverOnly
 
-  quantityChange: Int!
-  reason: InventoryAdjustmentReason!
+  quantityChange: Int @semanticNonNull
+  reason: InventoryAdjustmentReason @semanticNonNull
   referenceType: String @constraint(maxLength: 50)
   referenceId: UUID
   notes: String @constraint(maxLength: 500)
 
   performedByUserId: UUID @serverOnly
 
-  inventoryRecord: InventoryRecord! @hasOne
-
-  createdAt: DateTime! @readOnly
-  updatedAt: DateTime! @readOnly
+  inventoryRecord: InventoryRecord @belongsTo @semanticNonNull
 }
 
 enum InventoryAdjustmentReason {
@@ -347,16 +336,16 @@ enum InventoryAdjustmentReason {
 Immutable record of every price change for analytics and compliance.
 One entry per variant per change event.
 """
-type PriceHistoryEntry implements Node & Timestamped @model @scope(allow: [ADMIN, VENDOR]) {
+type PriceHistoryEntry implements Node & Timestamped
+  @model(operations: [READ, CREATE])
+  @scope(allow: [ADMIN, VENDOR]) {
   id: UUID!
-  productId: UUID! @serverOnly
-  variantId: UUID!
 
-  previousPrice: Money!
-  newPrice: Money!
+  previousPrice: Money @semanticNonNull
+  newPrice: Money @semanticNonNull
+
   changedByUserId: UUID @serverOnly
   reason: String @constraint(maxLength: 500)
 
-  createdAt: DateTime! @readOnly
-  updatedAt: DateTime! @readOnly
+  variant: ProductVariant @belongsTo @semanticNonNull
 }

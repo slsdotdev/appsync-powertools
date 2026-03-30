@@ -1,6 +1,5 @@
 import { createQueryResolver, createResolver, defineResolvers } from "@middy-appsync/graphql";
 import { isCognito } from "@middy-appsync/graphql/utils";
-import { User } from "../../generated/models.typegen";
 
 export const queryMe = createQueryResolver({
   fieldName: "me",
@@ -16,7 +15,12 @@ export const queryMe = createQueryResolver({
       firstName: "John",
       lastName: "Doe",
       email: "john@example.com",
-    } as User;
+      roles: ["GUEST"],
+      version: 1,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      __typename: "User",
+    };
   },
 });
 
