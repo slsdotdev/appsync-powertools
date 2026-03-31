@@ -1,4 +1,4 @@
-import { FieldNode } from "@gqlbase/core/definition";
+import { FieldNode, InputValueNode } from "@gqlbase/core/definition";
 
 export const UtilityDirective = {
   /** @serverOnly Marks a field as server-only, meaning it should only be resolved on the server and not exposed to the client. The field will be removed from the final schema */
@@ -21,7 +21,18 @@ export const UtilityDirective = {
 
   /** @updateOnly Marks a field as update-only, meaning it will only be available in the update input */
   UPDATE_ONLY: "updateOnly",
+
+  /**
+   * @constraint Adds validation constraints to a field. Mainly used by other plugins to add validation rules to fields.
+   */
+  CONSTRAINT: "constraint",
 } as const;
+
+export interface FieldContraints {
+  min?: number;
+  max?: number;
+  pattern?: string;
+}
 
 export const isReadOnly = (node: FieldNode): boolean => {
   return node.hasDirective(UtilityDirective.READ_ONLY);
@@ -49,4 +60,25 @@ export const isCreateOnly = (node: FieldNode): boolean => {
 
 export const isUpdateOnly = (node: FieldNode): boolean => {
   return node.hasDirective(UtilityDirective.UPDATE_ONLY);
+};
+
+export const hasConstraints = (node: FieldNode | InputValueNode): boolean => {
+  return node.hasDirective(UtilityDirective.CONSTRAINT);
+};
+
+export const parseConstraints = (node: FieldNode | InputValueNode): FieldContraints => {
+  if (!hasConstraints(node)) {
+    return {};
+  }
+
+  const directive = node.getDirective(UtilityDirective.CONSTRAINT);
+  const min = directive?.getArgument("min")?.value as number | undefined;
+  const max = directive?.getArgument("max")?.value as number | undefined;
+  const pattern = directive?.getArgument("pattern")?.value as string | undefined;
+
+  return {
+    min: node.type.getTypeName() === "Float" ? min : min ? Math.floor(min) : undefined,
+    max: node.type.getTypeName() === "Float" ? max : max ? Math.floor(max) : undefined,
+    pattern,
+  };
 };

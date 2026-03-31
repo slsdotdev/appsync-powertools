@@ -56,6 +56,7 @@ export class GraphQLTransformer {
         plugin.before();
       }
     }
+
     const beforeStamp = performance.now();
     this._context.logger.debug(
       "Before phase completed. Time taken: " + (beforeStamp - validateStamp).toFixed(2) + "ms"

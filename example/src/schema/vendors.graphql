@@ -23,11 +23,11 @@ type Vendor implements Node & Timestamped & Auditable & SoftDeletable & Versione
   """
   URL-safe unique handle (e.g. `sunny-acres-farm`).
   """
-  slug: String! @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 80)
-  businessName: String! @constraint(minLength: 2, maxLength: 200)
-  legalName: String @constraint(maxLength: 200) @scope(allow: [ADMIN, VENDOR])
-  description: String @constraint(maxLength: 2000)
-  shortBio: String @constraint(maxLength: 280)
+  slug: String! @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", max: 80)
+  businessName: String! @constraint(min: 2, max: 200)
+  legalName: String @constraint(max: 200) @scope(allow: [ADMIN, VENDOR])
+  description: String @constraint(max: 2000)
+  shortBio: String @constraint(max: 280)
 
   logoUrl: URL
   bannerUrl: URL
@@ -114,17 +114,17 @@ type VendorApplication implements Node & Timestamped & Auditable @model @scope(a
   productCategories: [String!]!
   estimatedWeeklyRevenue: Money
   farmSizeAcres: Float @constraint(min: 0)
-  farmAddress: String @constraint(maxLength: 500)
+  farmAddress: String @constraint(max: 500)
 
   """
   Free-form description of growing/production practices.
   """
-  practicesDescription: String @constraint(maxLength: 5000)
+  practicesDescription: String @constraint(max: 5000)
   documentUrls: [URL!]!
 
   status: ApplicationStatus!
   reviewerUserId: UUID @serverOnly
-  reviewNotes: String @constraint(maxLength: 5000)
+  reviewNotes: String @constraint(max: 5000)
   reviewedAt: DateTime @readOnly
   rejectionReason: ApplicationRejectionReason
 
@@ -250,10 +250,10 @@ type MarketLocation implements Node & Timestamped & SoftDeletable
   @cacheControl(maxAge: 3600, scope: PUBLIC) {
   id: UUID!
 
-  name: String! @constraint(minLength: 2, maxLength: 200)
-  slug: String! @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 80)
-  description: String @constraint(maxLength: 2000)
-  address: String! @constraint(maxLength: 500)
+  name: String! @constraint(min: 2, max: 200)
+  slug: String! @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", max: 80)
+  description: String @constraint(max: 2000)
+  address: String! @constraint(max: 500)
   location: GeoPoint!
   coverImageUrl: URL
   amenities: [MarketAmenity!]!
@@ -293,7 +293,7 @@ type MarketVendorAssignment implements Node & Timestamped @model @scope(allow: [
   vendorId: UUID! @serverOnly
   marketLocationId: UUID! @serverOnly
 
-  stallNumber: String @constraint(maxLength: 20)
+  stallNumber: String @constraint(max: 20)
   assignedDays: [DayOfWeek!]!
   effectiveFrom: Date!
   effectiveUntil: Date

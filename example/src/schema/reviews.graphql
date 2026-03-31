@@ -26,8 +26,8 @@ type Review implements Node & Timestamped & SoftDeletable & Versioned
   orderId: UUID! @serverOnly
 
   rating: Int! @constraint(min: 1, max: 5)
-  title: String @constraint(maxLength: 200)
-  body: String @constraint(maxLength: 5000)
+  title: String @constraint(max: 200)
+  body: String @constraint(max: 5000)
   imageUrls: [URL!]!
 
   """
@@ -37,7 +37,7 @@ type Review implements Node & Timestamped & SoftDeletable & Versioned
 
   moderationStatus: ModerationStatus! @readOnly @scope(allow: [ADMIN])
   moderatedAt: DateTime @readOnly @scope(allow: [ADMIN])
-  moderatorNotes: String @scope(allow: [ADMIN]) @constraint(maxLength: 1000)
+  moderatorNotes: String @scope(allow: [ADMIN]) @constraint(max: 1000)
 
   """
   Number of "helpful" votes from other customers.
@@ -82,7 +82,7 @@ type ReviewResponse implements Node & Timestamped & Versioned
   vendorId: UUID! @serverOnly
   respondedByUserId: UUID! @serverOnly
 
-  body: String! @constraint(minLength: 1, maxLength: 2000)
+  body: String! @constraint(min: 1, max: 2000)
 
   moderationStatus: ModerationStatus! @readOnly @scope(allow: [ADMIN])
 
@@ -134,11 +134,11 @@ type ReviewReport implements Node & Timestamped @model @scope(allow: [ADMIN]) {
   reporterUserId: UUID! @serverOnly
 
   reason: ReviewReportReason!
-  details: String @constraint(maxLength: 1000)
+  details: String @constraint(max: 1000)
 
   status: ReviewReportStatus! @readOnly
   resolvedAt: DateTime @readOnly
-  resolverNotes: String @constraint(maxLength: 1000)
+  resolverNotes: String @constraint(max: 1000)
 
   review: Review! @hasOne
 

@@ -19,9 +19,9 @@ type Category implements Timestamped & SoftDeletable
   @cacheControl(maxAge: 7200, scope: PUBLIC) {
   id: UUID!
 
-  name: String @semanticNonNull @constraint(minLength: 1, maxLength: 120)
-  slug: String @semanticNonNull @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 80)
-  description: String @constraint(maxLength: 1000)
+  name: String @semanticNonNull @constraint(min: 1, max: 120)
+  slug: String @semanticNonNull @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", max: 80)
+  description: String @constraint(max: 1000)
   iconUrl: URL
   sortOrder: Int @semanticNonNull
 
@@ -49,10 +49,10 @@ type Product implements Auditable & SoftDeletable & Versioned
   id: UUID!
   version: Int! @readOnly
 
-  name: String @semanticNonNull @constraint(minLength: 1, maxLength: 200)
-  slug: String @semanticNonNull @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", maxLength: 120)
-  description: String @constraint(maxLength: 5000)
-  shortDescription: String @constraint(maxLength: 280)
+  name: String @semanticNonNull @constraint(min: 1, max: 200)
+  slug: String @semanticNonNull @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", max: 120)
+  description: String @constraint(max: 5000)
+  shortDescription: String @constraint(max: 280)
 
   status: ProductStatus @semanticNonNull
   visibility: ProductVisibility @semanticNonNull
@@ -72,8 +72,8 @@ type Product implements Auditable & SoftDeletable & Versioned
   """
   SEO and social-sharing metadata. Null fields fall back to product name/description.
   """
-  seoTitle: String @constraint(maxLength: 70)
-  seoDescription: String @constraint(maxLength: 160)
+  seoTitle: String @constraint(max: 70)
+  seoDescription: String @constraint(max: 160)
 
   tags: [String] @semanticNonNull(levels: [0, 1])
 
@@ -160,9 +160,9 @@ type ProductAttributes {
   """
   Free-form origin description (e.g. "Sonoma County, CA").
   """
-  origin: String @constraint(maxLength: 200)
+  origin: String @constraint(max: 200)
   harvestMethod: HarvestMethod
-  storageInstructions: String @constraint(maxLength: 500)
+  storageInstructions: String @constraint(max: 500)
   shelfLifeDays: Int @constraint(min: 0)
 }
 
@@ -172,9 +172,9 @@ input ProductAttributesInput {
   certifications: [VendorCertification!]
   weightUnit: WeightUnit
   approximateWeightPerUnit: Float
-  origin: String @constraint(maxLength: 200)
+  origin: String @constraint(max: 200)
   harvestMethod: HarvestMethod
-  storageInstructions: String @constraint(maxLength: 500)
+  storageInstructions: String @constraint(max: 500)
   shelfLifeDays: Int @constraint(min: 0)
 }
 
@@ -222,7 +222,7 @@ type ProductVariant implements Node & Timestamped & Versioned
   """
   Display label (e.g. "1 lb bag", "Half dozen").
   """
-  name: String @semanticNonNull @constraint(minLength: 1, maxLength: 120)
+  name: String @semanticNonNull @constraint(min: 1, max: 120)
   sku: String
     @semanticNonNull
     @constraint(pattern: "^[A-Z0-9-]{3,40}$")
@@ -307,9 +307,9 @@ type InventoryAdjustment implements Node & Timestamped
 
   quantityChange: Int @semanticNonNull
   reason: InventoryAdjustmentReason @semanticNonNull
-  referenceType: String @constraint(maxLength: 50)
+  referenceType: String @constraint(max: 50)
   referenceId: UUID
-  notes: String @constraint(maxLength: 500)
+  notes: String @constraint(max: 500)
 
   performedByUserId: UUID @serverOnly
 
@@ -345,7 +345,7 @@ type PriceHistoryEntry implements Node & Timestamped
   newPrice: Money @semanticNonNull
 
   changedByUserId: UUID @serverOnly
-  reason: String @constraint(maxLength: 500)
+  reason: String @constraint(max: 500)
 
   variant: ProductVariant @belongsTo @semanticNonNull
 }

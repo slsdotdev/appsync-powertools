@@ -32,17 +32,15 @@ Evaluated at runtime by the authorization layer.
 """
 directive @auth(requires: Role!) on FIELD_DEFINITION
 
-"""
-Constrains a string or numeric field. Applied at input validation time.
-At least one parameter must be provided.
-"""
-directive @constraint(
-  minLength: Int
-  maxLength: Int
-  pattern: String
-  min: Float
-  max: Float
-) on FIELD_DEFINITION | INPUT_FIELD_DEFINITION | ARGUMENT_DEFINITION
+# """
+# Constrains a string or numeric field. Applied at input validation time.
+# At least one parameter must be provided.
+# """
+# directive @constraint(
+#   min: Float
+#   max: Float
+#   pattern: String
+# ) on FIELD_DEFINITION | INPUT_FIELD_DEFINITION | ARGUMENT_DEFINITION
 
 """
 Opt-in field-level caching hint. The transformer attaches Cache-Control

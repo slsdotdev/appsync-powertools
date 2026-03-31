@@ -3,7 +3,10 @@ import { createPluginFactory, ITransformerPlugin } from "@gqlbase/core/plugins";
 import {
   DefinitionNode,
   DirectiveDefinitionNode,
+  InputValueNode,
   InterfaceNode,
+  isInterfaceNode,
+  isObjectNode,
   ObjectNode,
   ValueNode,
 } from "@gqlbase/core/definition";
@@ -57,11 +60,7 @@ export class UtilitiesPlugin implements ITransformerPlugin {
         DirectiveDefinitionNode.create(
           UtilityDirective.CLIENT_ONLY,
           ValueNode.string(
-            `Marks a field as client-only, meaning the output value for this field is computed at runtime, and should not be included in the persistence layer. 
-            
-            This is useful for fields that are computed from other fields, or for fields that are only relevant to the client and should not be stored in the database. 
-            
-            The field will not be included in input objects.`,
+            `Marks a field as client-only, meaning the output value for this field is computed at runtime, and should not be included in the persistence layer.\n\nThis is useful for fields that are computed from other fields, or for fields that are only relevant to the client and should not be stored in the database.\n\nThe field will not be included in input objects.`,
             true
           ),
           ["FIELD_DEFINITION"]
@@ -93,15 +92,25 @@ export class UtilitiesPlugin implements ITransformerPlugin {
           ),
           ["FIELD_DEFINITION"]
         )
+      )
+      .addNode(
+        DirectiveDefinitionNode.create(
+          UtilityDirective.CONSTRAINT,
+          ValueNode.string(
+            "Adds validation constraints to a field. Mainly used by other plugins to add validation rules to fields. At least one parameter must be provided."
+          ),
+          ["FIELD_DEFINITION", "INPUT_FIELD_DEFINITION", "ARGUMENT_DEFINITION"],
+          [
+            InputValueNode.create("min", undefined, undefined, "Float"),
+            InputValueNode.create("max", undefined, undefined, "Float"),
+            InputValueNode.create("pattern", undefined, undefined, "String"),
+          ]
+        )
       );
   }
 
   public match(definition: DefinitionNode) {
-    if (definition instanceof ObjectNode || definition instanceof InterfaceNode) {
-      return true;
-    }
-
-    return false;
+    return isObjectNode(definition) || isInterfaceNode(definition);
   }
 
   public cleanup(definition: ObjectNode | InterfaceNode): void {
@@ -133,6 +142,10 @@ export class UtilitiesPlugin implements ITransformerPlugin {
       if (field.hasDirective(UtilityDirective.UPDATE_ONLY)) {
         field.removeDirective(UtilityDirective.UPDATE_ONLY);
       }
+
+      if (field.hasDirective(UtilityDirective.CONSTRAINT)) {
+        field.removeDirective(UtilityDirective.CONSTRAINT);
+      }
     }
   }
 
@@ -144,7 +157,8 @@ export class UtilitiesPlugin implements ITransformerPlugin {
       .removeNode(UtilityDirective.CLIENT_ONLY)
       .removeNode(UtilityDirective.FILTER_ONLY)
       .removeNode(UtilityDirective.CREATE_ONLY)
-      .removeNode(UtilityDirective.UPDATE_ONLY);
+      .removeNode(UtilityDirective.UPDATE_ONLY)
+      .removeNode(UtilityDirective.CONSTRAINT);
   }
 }
 

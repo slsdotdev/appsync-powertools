@@ -8,4 +8,7 @@ export {
   isServerOnly,
   isUpdateOnly,
   isWriteOnly,
+  hasConstraints,
+  parseConstraints,
+  type FieldContraints,
 } from "./UtilitiesPlugin.utils.js";

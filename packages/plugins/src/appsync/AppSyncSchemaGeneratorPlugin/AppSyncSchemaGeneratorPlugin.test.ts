@@ -359,11 +359,11 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
       context.startWork(
         DocumentNode.fromSource(/* GraphQL */ `
           directive @readOnly on FIELD_DEFINITION
-          directive @constraint(maxLength: Int) on FIELD_DEFINITION
+          directive @constraint(max: Int) on FIELD_DEFINITION
 
           type User {
             id: ID!
-            name: String! @constraint(maxLength: 100)
+            name: String! @constraint(max: 100)
             createdAt: String! @readOnly
           }
 
@@ -459,11 +459,11 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
     it("removes directives from input fields", () => {
       context.startWork(
         DocumentNode.fromSource(/* GraphQL */ `
-          directive @constraint(minLength: Int, maxLength: Int) on FIELD_DEFINITION
+          directive @constraint(max: Int, max: Int) on FIELD_DEFINITION
 
           input CreateUserInput {
-            name: String! @constraint(minLength: 1, maxLength: 100)
-            email: String! @constraint(maxLength: 320)
+            name: String! @constraint(max: 1, max: 100)
+            email: String! @constraint(max: 320)
           }
 
           type Mutation {
@@ -832,11 +832,11 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         DocumentNode.fromSource(/* GraphQL */ `
           directive @model on OBJECT
           directive @readOnly on FIELD_DEFINITION
-          directive @constraint(maxLength: Int) on FIELD_DEFINITION
+          directive @constraint(max: Int) on FIELD_DEFINITION
 
           type User @model @aws_api_key {
             id: UUID!
-            email: EmailAddress! @constraint(maxLength: 320)
+            email: EmailAddress! @constraint(max: 320)
             createdAt: DateTime! @readOnly
             name: String! @aws_api_key
           }

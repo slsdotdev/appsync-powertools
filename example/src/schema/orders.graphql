@@ -73,7 +73,7 @@ type CartItem implements Node & Timestamped @model @scope(allow: [SHOP]) {
   """
   Special instructions for this item (e.g. "extra ripe").
   """
-  notes: String @constraint(maxLength: 300)
+  notes: String @constraint(max: 300)
 
   cart: Cart! @hasOne
   variant: ProductVariant! @hasOne
@@ -119,7 +119,7 @@ type Order implements Node & Timestamped & Versioned @model @scope(allow: [ADMIN
   Requested delivery/pickup date. Null means "as soon as possible".
   """
   requestedDate: Date
-  customerNotes: String @constraint(maxLength: 1000)
+  customerNotes: String @constraint(max: 1000)
 
   # ----- Monetary breakdown (all snapshotted at checkout) -----
   subtotal: Money!
@@ -132,7 +132,7 @@ type Order implements Node & Timestamped & Versioned @model @scope(allow: [ADMIN
   """
   ISO 3166-2 tax jurisdiction code used for tax calculation.
   """
-  taxJurisdiction: String @serverOnly @constraint(maxLength: 10)
+  taxJurisdiction: String @serverOnly @constraint(max: 10)
 
   vendorOrders: [VendorOrder!]! @hasMany
   transactions: [PaymentTransaction!]! @hasMany
@@ -246,7 +246,7 @@ type VendorOrder implements Node & Timestamped & Versioned @model @scope(allow: 
   lineItems: [LineItem!]! @hasMany
   fulfillment: Fulfillment @hasOne(key: "vendorOrderId")
 
-  vendorNotes: String @constraint(maxLength: 1000) @scope(allow: [ADMIN, VENDOR])
+  vendorNotes: String @constraint(max: 1000) @scope(allow: [ADMIN, VENDOR])
   acknowledgedAt: DateTime @readOnly
   estimatedReadyAt: DateTime
 
@@ -306,7 +306,7 @@ type LineItem implements Node & Timestamped @model @scope(allow: [ADMIN, VENDOR,
   actualWeight: Float @scope(allow: [ADMIN, VENDOR])
   actualWeightUnit: WeightUnit @scope(allow: [ADMIN, VENDOR])
 
-  notes: String @constraint(maxLength: 300)
+  notes: String @constraint(max: 300)
 
   """
   Per-item fulfillment status for partial-fulfillment scenarios.
@@ -346,8 +346,8 @@ type Fulfillment implements Node & Timestamped @model @scope(allow: [ADMIN, VEND
   """
   Carrier name for shipped orders (e.g. "USPS", "FedEx").
   """
-  carrier: String @constraint(maxLength: 100)
-  trackingNumber: String @constraint(maxLength: 200)
+  carrier: String @constraint(max: 100)
+  trackingNumber: String @constraint(max: 200)
   trackingUrl: URL
 
   """
@@ -367,7 +367,7 @@ type Fulfillment implements Node & Timestamped @model @scope(allow: [ADMIN, VEND
   """
   Internal notes visible only to vendor and admin.
   """
-  internalNotes: String @constraint(maxLength: 1000)
+  internalNotes: String @constraint(max: 1000)
 
   vendorOrder: VendorOrder! @hasOne
 
@@ -409,11 +409,11 @@ type OrderTimelineEvent implements Node & Timestamped @model @scope(allow: [ADMI
   """
   Human-readable summary shown to the customer.
   """
-  publicMessage: String @constraint(maxLength: 500)
+  publicMessage: String @constraint(max: 500)
   """
   Detailed internal note for staff.
   """
-  internalMessage: String @constraint(maxLength: 1000) @scope(allow: [ADMIN, VENDOR])
+  internalMessage: String @constraint(max: 1000) @scope(allow: [ADMIN, VENDOR])
   """
   Machine-readable metadata (e.g. tracking info, status transition).
   """

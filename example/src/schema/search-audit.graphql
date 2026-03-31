@@ -55,7 +55,7 @@ type Wishlist implements Node & Timestamped @model @scope(allow: [SHOP]) {
   id: UUID!
   userId: UUID! @serverOnly
 
-  name: String! @constraint(minLength: 1, maxLength: 100)
+  name: String! @constraint(min: 1, max: 100)
   isDefault: Boolean! @readOnly
   visibility: WishlistVisibility!
 
@@ -78,7 +78,7 @@ type WishlistItem implements Node & Timestamped @model @scope(allow: [SHOP]) {
   productId: UUID!
   variantId: UUID
 
-  notes: String @constraint(maxLength: 300)
+  notes: String @constraint(max: 300)
 
   """
   Product snapshot fields for rendering even if product is removed.
@@ -106,8 +106,8 @@ type SavedSearch implements Node & Timestamped @model @scope(allow: [SHOP]) {
   id: UUID!
   userId: UUID! @serverOnly
 
-  label: String @constraint(maxLength: 120)
-  query: String! @constraint(maxLength: 500)
+  label: String @constraint(max: 120)
+  query: String! @constraint(max: 500)
   filters: SavedSearchFilters!
 
   notifyOnNewResults: Boolean!
@@ -160,13 +160,13 @@ type AuditLogEntry implements Node & Timestamped @model @scope(allow: [ADMIN]) {
   id: UUID!
 
   action: AuditAction!
-  entityType: String! @constraint(maxLength: 50)
+  entityType: String! @constraint(max: 50)
   entityId: UUID!
   actorType: ActorType!
   actorId: UUID @serverOnly
 
   ipAddress: String @serverOnly
-  userAgent: String @serverOnly @constraint(maxLength: 512)
+  userAgent: String @serverOnly @constraint(max: 512)
 
   """
   Structured change payload. Null for simple actions (e.g. login).
@@ -246,7 +246,7 @@ Zones are evaluated in priority order; the first matching zone applies.
 type DeliveryZone implements Node & Timestamped @model @scope(allow: [ADMIN]) {
   id: UUID!
 
-  name: String! @constraint(minLength: 1, maxLength: 120)
+  name: String! @constraint(min: 1, max: 120)
   """
   GeoJSON polygon string defining the zone boundary.
   """
@@ -286,10 +286,10 @@ Keys are namespaced (e.g. `checkout.cartTtlHours`, `payout.defaultHoldHours`).
 type PlatformConfig implements Node & Timestamped & Auditable @model @scope(allow: [ADMIN]) {
   id: UUID!
 
-  key: String! @constraint(pattern: "^[a-z]+(?:\\.[a-z][a-zA-Z]*)+$", maxLength: 120)
-  value: String! @constraint(maxLength: 5000)
+  key: String! @constraint(pattern: "^[a-z]+(?:\\.[a-z][a-zA-Z]*)+$", max: 120)
+  value: String! @constraint(max: 5000)
   valueType: ConfigValueType!
-  description: String @constraint(maxLength: 500)
+  description: String @constraint(max: 500)
 
   createdAt: DateTime! @readOnly
   updatedAt: DateTime! @readOnly

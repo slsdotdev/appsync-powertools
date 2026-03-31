@@ -96,8 +96,8 @@ type PaymentTransaction implements Node & Timestamped @model @scope(allow: [ADMI
   """
   Gateway-level decline code if status is FAILED.
   """
-  failureCode: String @readOnly @constraint(maxLength: 50)
-  failureMessage: String @readOnly @constraint(maxLength: 500)
+  failureCode: String @readOnly @constraint(max: 50)
+  failureMessage: String @readOnly @constraint(max: 500)
 
   """
   Links refund transactions back to the original capture.
@@ -159,7 +159,7 @@ type VendorPayout implements Node & Timestamped @model @scope(allow: [ADMIN, VEN
   initiatedAt: DateTime @readOnly
   completedAt: DateTime @readOnly
   failedAt: DateTime @readOnly
-  failureReason: String @readOnly @constraint(maxLength: 500)
+  failureReason: String @readOnly @constraint(max: 500)
 
   """
   VendorOrders included in this payout batch.
@@ -210,8 +210,8 @@ type Refund implements Node & Timestamped & Auditable @model @scope(allow: [ADMI
   status: RefundStatus!
   type: RefundType!
   reason: RefundReason!
-  customerNote: String @constraint(maxLength: 1000)
-  internalNote: String @constraint(maxLength: 1000) @scope(allow: [ADMIN])
+  customerNote: String @constraint(max: 1000)
+  internalNote: String @constraint(max: 1000) @scope(allow: [ADMIN])
 
   requestedAmount: Money!
   approvedAmount: Money @readOnly
@@ -274,7 +274,7 @@ type Coupon implements Node & Timestamped & Auditable & SoftDeletable
   id: UUID!
 
   code: String! @constraint(pattern: "^[A-Z0-9-]{3,30}$")
-  description: String @constraint(maxLength: 500)
+  description: String @constraint(max: 500)
 
   discountType: DiscountType!
   """
