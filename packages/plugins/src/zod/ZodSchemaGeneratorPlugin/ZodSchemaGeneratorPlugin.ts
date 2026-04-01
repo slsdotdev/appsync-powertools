@@ -136,7 +136,7 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
     );
   }
 
-  private _createScalarZodExpression(typeName: string): ts.Expression {
+  private _createScalarZodExpression(typeName: string, suffix = "Schema"): ts.Expression {
     if (isBuildInScalar(typeName)) {
       switch (typeName) {
         case "ID":
@@ -176,7 +176,7 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
       }
     }
 
-    return ts.factory.createIdentifier(`${typeName}Schema`);
+    return ts.factory.createIdentifier(`${typeName}${suffix}`);
   }
 
   private _applyConstraints(expr: ts.Expression, field: FieldNode | InputValueNode): ts.Expression {
@@ -244,14 +244,20 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
   private _createInputFieldZodExpression(
     field: InputValueNode,
     fieldType: TypeNode,
-    level = 0
+    level = 0,
+    suffix = "Schema"
   ): ts.Expression {
     if (fieldType instanceof NonNullTypeNode) {
-      return this._createInputFieldZodExpression(field, fieldType.type, level);
+      return this._createInputFieldZodExpression(field, fieldType.type, level, suffix);
     }
 
     if (fieldType instanceof ListTypeNode) {
-      const elementExpr = this._createInputFieldZodExpression(field, fieldType.type, level + 1);
+      const elementExpr = this._createInputFieldZodExpression(
+        field,
+        fieldType.type,
+        level + 1,
+        suffix
+      );
       let arrayExpr = this._zCall("array", [elementExpr]);
 
       if (isNullableTypeNode(field.type, level)) {
@@ -261,7 +267,7 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
       return arrayExpr;
     }
 
-    let expr = this._createScalarZodExpression(fieldType.name);
+    let expr = this._createScalarZodExpression(fieldType.name, suffix);
     expr = this._applyConstraints(expr, field);
 
     if (isNullableTypeNode(field.type, level)) {
@@ -269,16 +275,6 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
     }
 
     return expr;
-  }
-
-  private _hasSelfReferenceFields(definition: InputObjectNode): boolean {
-    for (const field of definition.fields ?? []) {
-      if (field.type.getTypeName() === definition.name) {
-        return true;
-      }
-    }
-
-    return false;
   }
 
   private _createObjectFieldProperties(
@@ -306,11 +302,19 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
     return properties;
   }
 
-  private _createInputFieldProperties(definition: InputObjectNode): ts.ObjectLiteralElementLike[] {
+  private _createInputFieldProperties(
+    definition: InputObjectNode,
+    excludes: string[] = [],
+    suffix = "Schema"
+  ): ts.ObjectLiteralElementLike[] {
     const properties: ts.ObjectLiteralElementLike[] = [];
 
     for (const field of definition.fields ?? []) {
-      const zodExpr = this._createInputFieldZodExpression(field, field.type);
+      if (excludes.includes(field.name)) {
+        continue;
+      }
+
+      const zodExpr = this._createInputFieldZodExpression(field, field.type, 0, suffix);
 
       properties.push(
         ts.factory.createPropertyAssignment(ts.factory.createIdentifier(field.name), zodExpr)
@@ -323,10 +327,11 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
   private _createSchemaConstDeclaration(
     name: string,
     initializer: ts.Expression,
-    suffix = "Schema"
+    suffix = "Schema",
+    exported = true
   ): ts.VariableStatement {
     return ts.factory.createVariableStatement(
-      [ts.factory.createModifier(ts.SyntaxKind.ExportKeyword)],
+      exported ? [ts.factory.createModifier(ts.SyntaxKind.ExportKeyword)] : undefined,
       ts.factory.createVariableDeclarationList(
         [
           ts.factory.createVariableDeclaration(
@@ -339,6 +344,18 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
         ts.NodeFlags.Const
       )
     );
+  }
+
+  private _getSelfReferenceFields(definition: InputObjectNode): InputValueNode[] {
+    const selfRefs: InputValueNode[] = [];
+
+    for (const field of definition.fields ?? []) {
+      if (field.type.getTypeName() === definition.name) {
+        selfRefs.push(field);
+      }
+    }
+
+    return selfRefs;
   }
 
   private _generateEnum(definition: EnumNode) {
@@ -367,26 +384,46 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
   }
 
   private _generateInputObject(definition: InputObjectNode) {
-    const hasSelfRefs = this._hasSelfReferenceFields(definition);
+    const selfRefs = this._getSelfReferenceFields(definition);
+
+    if (selfRefs.length > 0) {
+      const properties = this._createInputFieldProperties(
+        definition,
+        selfRefs.map((f) => f.name)
+      );
+
+      const base = this._zCall("object", [
+        ts.factory.createObjectLiteralExpression(properties, true),
+      ]);
+
+      const extension = InputObjectNode.create(definition.name, undefined, undefined, selfRefs);
+
+      const initializer = ts.factory.createCallExpression(
+        ts.factory.createPropertyAccessExpression(
+          ts.factory.createIdentifier(`${definition.name}Base`),
+          ts.factory.createIdentifier("extend")
+        ),
+        undefined,
+        [
+          ts.factory.createObjectLiteralExpression(
+            this._createInputFieldProperties(extension, undefined, "Base"),
+            true
+          ),
+        ]
+      );
+
+      this.nodes.push(
+        this._createSchemaConstDeclaration(definition.name, base, "Base", false),
+        this._createSchemaConstDeclaration(definition.name, initializer)
+      );
+
+      return;
+    }
 
     const properties = this._createInputFieldProperties(definition);
-
-    let initializer = this._zCall("object", [
+    const initializer = this._zCall("object", [
       ts.factory.createObjectLiteralExpression(properties, true),
     ]);
-
-    if (hasSelfRefs) {
-      initializer = this._zCall("lazy", [
-        ts.factory.createArrowFunction(
-          undefined,
-          undefined,
-          [],
-          undefined,
-          ts.factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
-          ts.factory.createBlock([ts.factory.createReturnStatement(initializer)], true)
-        ),
-      ]);
-    }
 
     this.nodes.push(this._createSchemaConstDeclaration(definition.name, initializer));
   }

@@ -14,7 +14,7 @@ Platform user account. A single person may hold multiple roles simultaneously
 and driven by the access token's active scope.
 """
 type User implements Node & Timestamped & SoftDeletable & Versioned
-  @model(operations: [WRITE])
+  @model
   @scope(allow: [ADMIN, VENDOR, SHOP]) {
   id: UUID!
   version: Int @readOnly @semanticNonNull
