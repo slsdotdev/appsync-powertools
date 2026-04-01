@@ -1,5 +1,15 @@
 # gqlbase
 
+## 0.1.4
+
+### Patch Changes
+
+- Updated dependencies [cd20bc5]
+  - @gqlbase/plugins@0.1.4
+  - @gqlbase/cli@0.1.4
+  - @gqlbase/core@0.1.4
+  - @gqlbase/shared@0.1.4
+
 ## 0.1.3
 
 ### Patch Changes
