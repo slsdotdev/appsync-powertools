@@ -72,13 +72,21 @@ export const parseConstraints = (node: FieldNode | InputValueNode): FieldContrai
   }
 
   const directive = node.getDirective(UtilityDirective.CONSTRAINT);
-  const min = directive?.getArgument("min")?.value as number | undefined;
-  const max = directive?.getArgument("max")?.value as number | undefined;
-  const pattern = directive?.getArgument("pattern")?.value as string | undefined;
+  const args = directive?.getArgumentsJSON();
 
   return {
-    min: node.type.getTypeName() === "Float" ? min : min ? Math.floor(min) : undefined,
-    max: node.type.getTypeName() === "Float" ? max : max ? Math.floor(max) : undefined,
-    pattern,
+    min:
+      typeof args?.min === "number"
+        ? node.type.getTypeName() === "Float"
+          ? args.min
+          : Math.floor(args.min)
+        : undefined,
+    max:
+      typeof args?.max === "number"
+        ? node.type.getTypeName() === "Float"
+          ? args.max
+          : Math.floor(args.max)
+        : undefined,
+    pattern: typeof args?.pattern === "string" ? args.pattern : undefined,
   };
 };

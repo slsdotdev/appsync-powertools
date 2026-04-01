@@ -49,16 +49,7 @@
     "@gqlbase/core": "^0.1.3",
     "@gqlbase/shared": "^0.1.3"
   },
-  "devDependencies": {
-    "@middy-appsync/graphql": "^0.1.1"
-  },
   "peerDependencies": {
-    "@middy-appsync/graphql": "^0.1",
-    "graphql": "^16.13.2"
-  },
-  "peerDependenciesMeta": {
-    "@middy-appsync/graphql": {
-      "optional": true
-    }
+    "typescript": "^5 || ^6"
   }
 }

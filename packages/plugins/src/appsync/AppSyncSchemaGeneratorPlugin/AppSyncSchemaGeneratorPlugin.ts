@@ -14,14 +14,12 @@ import {
   ObjectNode,
   UnionNode,
   TypeNode,
+  isScalarNode,
+  isDirectiveDefinitionNode,
 } from "@gqlbase/core/definition";
 import { createPluginFactory, isInternal } from "@gqlbase/core/plugins";
 import { isBuildInScalar } from "@gqlbase/shared/definition";
-import {
-  AppSyncSchemaGeneratorPluginOptions,
-  isDirectiveNode,
-  isScalarNode,
-} from "./AppSyncSchemaGeneratorPlugin.utils.js";
+import { AppSyncSchemaGeneratorPluginOptions } from "./AppSyncSchemaGeneratorPlugin.utils.js";
 import {
   isAppSyncDirective,
   isAppSyncScalar,
@@ -189,7 +187,9 @@ export class AppSyncSchemaGeneratorPlugin extends TransformerPluginBase {
   }
 
   public match(definition: DefinitionNode): boolean {
-    return !isScalarNode(definition) && !isDirectiveNode(definition) && !isInternal(definition);
+    return (
+      !isScalarNode(definition) && !isDirectiveDefinitionNode(definition) && !isInternal(definition)
+    );
   }
 
   public generate(definition: DefinitionNode) {

@@ -1,4 +1,3 @@
-import { DefinitionNode, DirectiveDefinitionNode, ScalarNode } from "@gqlbase/core/definition";
 import { AppSyncScalarName } from "../AppSyncUtilsPlugin/AppSyncUtilsPlugin.utils.js";
 import { BuildInScalar } from "@gqlbase/shared/definition";
 
@@ -15,11 +14,3 @@ export interface AppSyncSchemaGeneratorPluginOptions {
    */
   scalarMappings?: Record<string, AppSyncScalarName | BuildInScalar>;
 }
-
-export const isScalarNode = (node: DefinitionNode): boolean => {
-  return node instanceof ScalarNode;
-};
-
-export const isDirectiveNode = (node: DefinitionNode): boolean => {
-  return node instanceof DirectiveDefinitionNode;
-};

@@ -11,7 +11,8 @@
     "watch": "gqlbase --watch --verbose"
   },
   "dependencies": {
-    "@middy-appsync/graphql": "^0.1.1"
+    "@middy-appsync/graphql": "^0.1.1",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@gqlbase/cli": "^0.1.3",

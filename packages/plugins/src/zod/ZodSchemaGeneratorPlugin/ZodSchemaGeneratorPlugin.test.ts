@@ -1,0 +1,937 @@
+import { beforeAll, describe, expect, it } from "vitest";
+import { TransformerContext } from "@gqlbase/core";
+import { DocumentNode, ObjectNode } from "@gqlbase/core/definition";
+import { ScalarsPlugin } from "../../base/ScalarsPlugin/ScalarsPlugin.js";
+import { UtilitiesPlugin } from "../../base/UtilitiesPlugin/UtilitiesPlugin.js";
+import { ZodSchemaGeneratorPlugin } from "./ZodSchemaGeneratorPlugin.js";
+
+const generateSchemas = (
+  plugin: ZodSchemaGeneratorPlugin,
+  context: TransformerContext,
+  schema: string,
+  nodeNames: string[]
+) => {
+  context.finishWork();
+  context.startWork(DocumentNode.fromSource(schema));
+
+  plugin.before();
+
+  for (const name of nodeNames) {
+    const node = context.document.getNode(name);
+    if (node && plugin.match(node)) {
+      plugin.generate(node);
+    }
+  }
+
+  const result = plugin.output() as { zodSchemas: string };
+  return result.zodSchemas;
+};
+
+describe("ZodSchemaGeneratorPlugin", () => {
+  describe("enum generation", () => {
+    let plugin: ZodSchemaGeneratorPlugin;
+    let context: TransformerContext;
+
+    beforeAll(() => {
+      context = new TransformerContext();
+      plugin = new ZodSchemaGeneratorPlugin(context, { emitOutput: true });
+      context.registerPlugin(plugin);
+    });
+
+    it("generates z.enum for a simple enum", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          enum UserRole {
+            ADMIN
+            USER
+          }
+          type Query {
+            me: String
+          }
+        `,
+        ["UserRole"]
+      );
+
+      expect(output).toContain('export const UserRoleSchema = z.enum(["ADMIN", "USER"])');
+    });
+
+    it("generates z.enum with single value", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          enum Status {
+            ACTIVE
+          }
+          type Query {
+            me: String
+          }
+        `,
+        ["Status"]
+      );
+
+      expect(output).toContain('export const StatusSchema = z.enum(["ACTIVE"])');
+    });
+  });
+
+  describe("built-in scalar field mapping", () => {
+    let plugin: ZodSchemaGeneratorPlugin;
+    let context: TransformerContext;
+
+    beforeAll(() => {
+      context = new TransformerContext();
+      plugin = new ZodSchemaGeneratorPlugin(context, { emitOutput: true });
+      context.registerPlugin(plugin);
+    });
+
+    it("maps ID! to z.string()", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            id: ID!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("id: z.string()");
+    });
+
+    it("maps String! to z.string()", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            name: String!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("name: z.string()");
+    });
+
+    it("maps Int! to z.int()", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            age: Int!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("age: z.int()");
+    });
+
+    it("maps Float! to z.number()", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            score: Float!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("score: z.number()");
+    });
+
+    it("maps Boolean! to z.boolean()", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            active: Boolean!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("active: z.boolean()");
+    });
+  });
+
+  describe("nullability", () => {
+    let plugin: ZodSchemaGeneratorPlugin;
+    let context: TransformerContext;
+
+    beforeAll(() => {
+      context = new TransformerContext();
+      plugin = new ZodSchemaGeneratorPlugin(context, { emitOutput: true });
+      context.registerPlugin(plugin);
+    });
+
+    it("wraps nullable field with .nullable().optional()", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            bio: String
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("bio: z.string().nullable().optional()");
+    });
+
+    it("does not wrap non-null field", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            id: ID!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("id: z.string()");
+      expect(output).not.toContain("id: z.string().nullable()");
+    });
+  });
+
+  describe("semantic nullability", () => {
+    let plugin: ZodSchemaGeneratorPlugin;
+    let context: TransformerContext;
+
+    beforeAll(() => {
+      context = new TransformerContext();
+      plugin = new ZodSchemaGeneratorPlugin(context, { emitOutput: true });
+      context.registerPlugin(plugin);
+    });
+
+    it("generates non-nullable for fields with @semanticNonNull", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            name: String @semanticNonNull
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("name: z.string()");
+      expect(output).not.toContain("name: z.string().nullable()");
+    });
+
+    it("wraps list items with nullable when only list level is @semanticNonNull", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            tags: [String] @semanticNonNull
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      // level 0 non-null (directive), level 1 nullable (not specified)
+      expect(output).toContain("tags: z.array(z.string().nullable())");
+      expect(output).not.toContain("tags: z.array(z.string().nullable()).nullable()");
+    });
+
+    it("generates fully non-null list when all levels are @semanticNonNull", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            tags: [String] @semanticNonNull(levels: [0, 1])
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("tags: z.array(z.string())");
+      expect(output).not.toContain(".nullable()");
+    });
+
+    it("generates nullable list with non-null items for @semanticNonNull(levels: [1])", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            tags: [String] @semanticNonNull(levels: [1])
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      // level 0 nullable, level 1 non-null
+      expect(output).toContain("tags: z.array(z.string()).nullable().optional()");
+    });
+
+    it("combines schema NonNull with @semanticNonNull on lists", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            tags: [String!] @semanticNonNull
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      // level 0 covered by @semanticNonNull, level 1 covered by String!
+      expect(output).toContain("tags: z.array(z.string())");
+      expect(output).not.toContain(".nullable()");
+    });
+  });
+
+  describe("list types", () => {
+    let plugin: ZodSchemaGeneratorPlugin;
+    let context: TransformerContext;
+
+    beforeAll(() => {
+      context = new TransformerContext();
+      plugin = new ZodSchemaGeneratorPlugin(context, { emitOutput: true });
+      context.registerPlugin(plugin);
+    });
+
+    it("generates z.array for [String!]!", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            tags: [String!]!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("tags: z.array(z.string())");
+    });
+
+    it("generates nullable array for [String!]", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            tags: [String!]
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("tags: z.array(z.string()).nullable().optional()");
+    });
+
+    it("generates array with nullable items for [String]!", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            tags: [String]!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("tags: z.array(z.string().nullable())");
+    });
+
+    it("generates fully nullable list for [String]", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            tags: [String]
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("tags: z.array(z.string().nullable()).nullable().optional()");
+    });
+  });
+
+  describe("constraint directive", () => {
+    let plugin: ZodSchemaGeneratorPlugin;
+    let context: TransformerContext;
+
+    beforeAll(() => {
+      context = new TransformerContext();
+      const utilsPlugin = new UtilitiesPlugin(context);
+      context.registerPlugin(utilsPlugin);
+      plugin = new ZodSchemaGeneratorPlugin(context, { emitOutput: true });
+      context.registerPlugin(plugin);
+    });
+
+    it("applies .min() and .max() for string @constraint", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            name: String! @constraint(min: 3, max: 50)
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("name: z.string().min(3).max(50)");
+    });
+
+    it("applies .regex() for @constraint(pattern)", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            code: String! @constraint(pattern: "^[A-Z]+$")
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("code: z.string().regex(/^[A-Z]+$/)");
+    });
+
+    it("applies min/max to Int fields", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            age: Int! @constraint(min: 0, max: 150)
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("age: z.int().min(0).max(150)");
+    });
+
+    it("applies all constraints together on a string field", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            slug: String! @constraint(min: 1, max: 100, pattern: "^[a-z0-9-]+$")
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/)");
+    });
+
+    it("applies constraints before nullable wrapping", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            bio: String @constraint(max: 500)
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("bio: z.string().max(500).nullable().optional()");
+    });
+  });
+
+  describe("custom scalar mapping", () => {
+    let plugin: ZodSchemaGeneratorPlugin;
+    let context: TransformerContext;
+
+    beforeAll(() => {
+      context = new TransformerContext();
+      const scalars = new ScalarsPlugin(context);
+      context.registerPlugin(scalars);
+      plugin = new ZodSchemaGeneratorPlugin(context, { emitOutput: true });
+      context.registerPlugin(plugin);
+    });
+
+    it("maps DateTime to z.iso.datetime()", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            createdAt: DateTime!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("createdAt: z.iso.datetime()");
+    });
+
+    it("maps Date to z.iso.date()", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            birthday: Date!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("birthday: z.iso.date()");
+    });
+
+    it("maps Time to z.iso.time()", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            loginTime: Time!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("loginTime: z.iso.time()");
+    });
+
+    it("maps Timestamp to z.number()", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            lastSeen: Timestamp!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("lastSeen: z.number()");
+    });
+
+    it("maps UUID to z.guid({ version: 4 })", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            id: UUID!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("id: z.uuid()");
+    });
+
+    it("maps URL to z.url()", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            website: URL!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("website: z.url()");
+    });
+
+    it("maps EmailAddress to z.email()", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            email: EmailAddress!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("email: z.email()");
+    });
+
+    it("maps PhoneNumber to z.e164()", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            phone: PhoneNumber!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("phone: z.e164()");
+    });
+
+    it("maps IPAddress to z.ip()", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            ip: IPAddress!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("ip: z.ip()");
+    });
+
+    it("maps JSON to z.record(z.string(), z.unknown())", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            metadata: JSON!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain("metadata: z.record(z.string(), z.unknown())");
+    });
+  });
+
+  describe("object type references", () => {
+    let plugin: ZodSchemaGeneratorPlugin;
+    let context: TransformerContext;
+
+    beforeAll(() => {
+      context = new TransformerContext();
+      plugin = new ZodSchemaGeneratorPlugin(context, { emitOutput: true });
+      context.registerPlugin(plugin);
+    });
+
+    it("references enum schema by name", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          enum UserRole {
+            ADMIN
+            USER
+          }
+          type User {
+            role: UserRole!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["UserRole", "User"]
+      );
+
+      expect(output).toContain("role: UserRoleSchema");
+    });
+
+    it("references another object type schema", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type Address {
+            street: String!
+          }
+          type User {
+            address: Address!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["Address", "User"]
+      );
+
+      expect(output).toContain("address: AddressSchema");
+    });
+  });
+
+  describe("input object types", () => {
+    let plugin: ZodSchemaGeneratorPlugin;
+    let context: TransformerContext;
+
+    beforeAll(() => {
+      context = new TransformerContext();
+      plugin = new ZodSchemaGeneratorPlugin(context, { emitOutput: true });
+      context.registerPlugin(plugin);
+    });
+
+    it("generates z.object for input types", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          input CreateUserInput {
+            name: String!
+            email: String!
+          }
+          type Query {
+            me: String
+          }
+        `,
+        ["CreateUserInput"]
+      );
+
+      expect(output).toContain("export const CreateUserInputSchema = z.object({");
+      expect(output).toContain("name: z.string()");
+      expect(output).toContain("email: z.string()");
+    });
+
+    it("uses standard nullability for input fields (not semantic)", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          input UpdateUserInput {
+            name: String
+            age: Int
+          }
+          type Query {
+            me: String
+          }
+        `,
+        ["UpdateUserInput"]
+      );
+
+      expect(output).toContain("name: z.string().nullable().optional()");
+      expect(output).toContain("age: z.int().nullable().optional()");
+    });
+  });
+
+  describe("union types", () => {
+    let plugin: ZodSchemaGeneratorPlugin;
+    let context: TransformerContext;
+
+    beforeAll(() => {
+      context = new TransformerContext();
+      plugin = new ZodSchemaGeneratorPlugin(context, { emitOutput: true });
+      context.registerPlugin(plugin);
+    });
+
+    it("generates z.union for union types", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            id: ID!
+          }
+          type Post {
+            id: ID!
+          }
+          union SearchResult = User | Post
+          type Query {
+            search: SearchResult
+          }
+        `,
+        ["User", "Post", "SearchResult"]
+      );
+
+      expect(output).toContain(
+        "export const SearchResultSchema = z.union([UserSchema, PostSchema])"
+      );
+    });
+  });
+
+  describe("output structure", () => {
+    let plugin: ZodSchemaGeneratorPlugin;
+    let context: TransformerContext;
+
+    beforeAll(() => {
+      context = new TransformerContext();
+      plugin = new ZodSchemaGeneratorPlugin(context, { emitOutput: true });
+      context.registerPlugin(plugin);
+    });
+
+    it("includes zod import statement", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            id: ID!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User"]
+      );
+
+      expect(output).toContain('import * as z from "zod/v4"');
+    });
+
+    it("does not match Query type", () => {
+      context.finishWork();
+      context.startWork(
+        DocumentNode.fromSource(/* GraphQL */ `
+          type Query {
+            me: String
+          }
+        `)
+      );
+
+      const queryNode = context.document.getNode("Query") as ObjectNode;
+      expect(plugin.match(queryNode)).toBe(false);
+    });
+
+    it("does not match Mutation type", () => {
+      context.finishWork();
+      context.startWork(
+        DocumentNode.fromSource(/* GraphQL */ `
+          type Mutation {
+            doSomething: String
+          }
+          type Query {
+            me: String
+          }
+        `)
+      );
+
+      const mutationNode = context.document.getNode("Mutation") as ObjectNode;
+      expect(plugin.match(mutationNode)).toBe(false);
+    });
+
+    it("exports each schema as a const", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          enum Role {
+            ADMIN
+          }
+          type User {
+            id: ID!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["Role", "User"]
+      );
+
+      expect(output).toContain("export const RoleSchema");
+      expect(output).toContain("export const UserSchema");
+    });
+  });
+});
