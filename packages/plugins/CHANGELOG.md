@@ -1,5 +1,13 @@
 # @gqlbase/plugins
 
+## 0.1.4
+
+### Patch Changes
+
+- cd20bc5: Added ZodSchemaGeneratorPlugin
+  - @gqlbase/core@0.1.4
+  - @gqlbase/shared@0.1.4
+
 ## 0.1.3
 
 ### Patch Changes
