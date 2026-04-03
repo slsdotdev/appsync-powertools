@@ -117,6 +117,10 @@ function getPluralRule(word: string) {
   return null;
 }
 
+export function snakeCase(...string: string[]): string {
+  return normalize(...string).join("_");
+}
+
 export function pluralize(word: string) {
   const rule = getPluralRule(word);
   if (!rule) {

@@ -10,6 +10,7 @@ import {
   InputValueNode,
   InterfaceNode,
   isEnumNode,
+  isInputObjectNode,
   isListTypeNode,
   isObjectLike,
   isScalarNode,
@@ -18,6 +19,7 @@ import {
   NonNullTypeNode,
   ObjectNode,
   ScalarNode,
+  TypeNode,
 } from "@gqlbase/core/definition";
 import { createPluginFactory, getTypeHint, InternalDirective } from "@gqlbase/core/plugins";
 import { TransformerPluginExecutionError } from "@gqlbase/shared/errors";
@@ -36,6 +38,7 @@ import {
   shouldSkipFieldFromUpdateInput,
 } from "./ModelPlugin.utils.js";
 import { isManyRelationship } from "../RelationsPlugin/RelationsPlugin.utils.js";
+import { isSemanticNullable } from "../RfcFeaturesPlugin/RfcFeaturesPlugin.utils.js";
 
 /**
  * `@model` directive plugin.
@@ -140,7 +143,7 @@ export class ModelPlugin implements ITransformerPlugin {
 
     const args = directive.getArgumentsJSON<{ operations?: OperationType[] }>();
 
-    if (args.operations && args.operations.length > 0) {
+    if (args.operations) {
       return this._expandOperations(
         args.operations
           .map((op) => ModelOperation[op as keyof typeof ModelOperation])
@@ -417,15 +420,57 @@ export class ModelPlugin implements ITransformerPlugin {
     return filterInput;
   }
 
+  private _createInputValueNode(
+    field: FieldNode,
+    typeNode: TypeNode,
+    forceNullable = false,
+    level = 0
+  ): TypeNode {
+    if (
+      (typeNode instanceof NonNullTypeNode && typeNode.type instanceof ListTypeNode) ||
+      typeNode instanceof ListTypeNode
+    ) {
+      const valueTypeNode = ListTypeNode.create(
+        this._createInputValueNode(field, typeNode.type, false, level + 1)
+      );
+
+      return forceNullable || isSemanticNullable(field, level)
+        ? valueTypeNode
+        : NonNullTypeNode.create(valueTypeNode);
+    }
+
+    const typeName = NamedTypeNode.create(typeNode.getTypeName());
+
+    return forceNullable || isSemanticNullable(field, level)
+      ? typeName
+      : NonNullTypeNode.create(typeName);
+  }
+
+  private _isIdField(field: FieldNode) {
+    return field.name === "id";
+  }
+
+  private _cloneTypeNode<T extends TypeNode>(typeNode: T, newName: string): T {
+    if (typeNode instanceof NonNullTypeNode) {
+      return NonNullTypeNode.create(this._cloneTypeNode(typeNode.type, newName)) as T;
+    }
+
+    if (typeNode instanceof ListTypeNode) {
+      return ListTypeNode.create(this._cloneTypeNode(typeNode.type, newName)) as T;
+    }
+
+    return NamedTypeNode.create(newName) as T;
+  }
+
   private _createMutationInput(
     model: ObjectNode,
+    verb: "create" | "update" | "upsert",
     inputName: string,
-    requiredFields: string[] = [],
-    verb: "create" | "update" | "upsert"
+    enforceNullable = false
   ) {
     const mutationInput = this.context.document.getNode(inputName);
 
-    if (mutationInput && !(mutationInput instanceof InputObjectNode)) {
+    if (mutationInput && !isInputObjectNode(mutationInput)) {
       throw new TransformerPluginExecutionError(
         this.name,
         `Type ${mutationInput} is not an input type`
@@ -446,13 +491,15 @@ export class ModelPlugin implements ITransformerPlugin {
 
         const fieldTypeName = field.type.getTypeName();
 
-        if (requiredFields.includes(field.name)) {
+        if (this._isIdField(field)) {
           input.addField(
             InputValueNode.create(
               field.name,
               undefined,
               undefined,
-              NonNullTypeNode.create(fieldTypeName)
+              verb === "create"
+                ? NamedTypeNode.create(fieldTypeName)
+                : NonNullTypeNode.create(fieldTypeName)
             )
           );
           continue;
@@ -465,7 +512,7 @@ export class ModelPlugin implements ITransformerPlugin {
               field.name,
               undefined,
               undefined,
-              NamedTypeNode.create(fieldTypeName)
+              this._createInputValueNode(field, field.type, enforceNullable)
             )
           );
           continue;
@@ -477,13 +524,13 @@ export class ModelPlugin implements ITransformerPlugin {
           throw new TransformerPluginExecutionError(this.name, `Unknown type ${fieldTypeName}`);
         }
 
-        if (typeDef instanceof ScalarNode || typeDef instanceof EnumNode) {
+        if (isScalarNode(typeDef) || isEnumNode(typeDef)) {
           input.addField(
             InputValueNode.create(
               field.name,
               undefined,
               undefined,
-              NamedTypeNode.create(fieldTypeName)
+              this._createInputValueNode(field, field.type, enforceNullable)
             )
           );
           continue;
@@ -497,11 +544,20 @@ export class ModelPlugin implements ITransformerPlugin {
           const inputName = pascalCase(fieldTypeName, "input");
 
           if (!this.context.document.hasNode(inputName)) {
-            this._createMutationInput(typeDef, inputName, [], verb);
+            this._createMutationInput(typeDef, verb, inputName, false);
           }
 
           input.addField(
-            InputValueNode.create(field.name, undefined, undefined, NamedTypeNode.create(inputName))
+            InputValueNode.create(
+              field.name,
+              undefined,
+              undefined,
+              this._createInputValueNode(
+                field,
+                this._cloneTypeNode(field.type, inputName),
+                enforceNullable
+              )
+            )
           );
         }
       }
@@ -714,9 +770,9 @@ export class ModelPlugin implements ITransformerPlugin {
         case "update":
           this._createMutationInput(
             definition,
+            verb,
             pascalCase(verb, definition.name, "input"),
-            verb === "update" ? ["id"] : [],
-            verb
+            verb !== "create"
           );
           continue;
         default:

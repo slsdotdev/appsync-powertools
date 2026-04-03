@@ -1,1 +1,1 @@
-export { camelCase, pascalCase, capitalize, pluralize } from "./strings.js";
+export { camelCase, pascalCase, capitalize, pluralize, snakeCase } from "./strings.js";

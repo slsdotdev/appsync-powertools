@@ -5,6 +5,6 @@
     "inlineSources": false,
     "moduleResolution": "bundler",
     "module": "esnext",
-    "target": "esnext"
+    "target": "esnext",
   },
 }
