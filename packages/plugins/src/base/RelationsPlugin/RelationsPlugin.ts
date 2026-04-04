@@ -14,6 +14,7 @@ import {
   UnionNode,
   isListTypeNode,
   DirectiveNode,
+  NonNullTypeNode,
 } from "@gqlbase/core/definition";
 import { TransformerPluginExecutionError } from "@gqlbase/shared/errors";
 import { pascalCase } from "@gqlbase/shared/format";
@@ -31,6 +32,7 @@ import {
   isBelongsToRelationship,
 } from "./RelationsPlugin.utils.js";
 import { UtilityDirective } from "../UtilitiesPlugin/index.js";
+import { isSemanticNullable } from "../RfcFeaturesPlugin/RfcFeaturesPlugin.utils.js";
 
 /**
  * This plugin is responsible for adding the `@hasOne` and `@hasMany` directives to the schema, which can be used to define relationships between types.
@@ -104,6 +106,52 @@ export class RelationsPlugin implements ITransformerPlugin {
     return target;
   }
 
+  private _getKeyTypeName(target: RelationTarget): string {
+    if (isUnionNode(target)) {
+      const idTypes = new Set<string>();
+
+      for (const type of target.types ?? []) {
+        const unionType = this.context.document.getNodeOrThrow(type.getTypeName());
+
+        if (isObjectNode(unionType) || isInterfaceNode(unionType)) {
+          const idField = unionType.getField("id");
+
+          if (!idField) {
+            throw new TransformerPluginExecutionError(
+              this.name,
+              `Union type ${target.name} has a member ${unionType.name} that does not have an id field. A key directive with an explicit type must be provided.`
+            );
+          }
+
+          idTypes.add(idField.type.getTypeName());
+          continue;
+        }
+
+        throw new TransformerPluginExecutionError(
+          this.name,
+          `Invalid relation union target: ${target.name}`
+        );
+      }
+
+      if (idTypes.size > 1) {
+        return "ID";
+      }
+
+      return idTypes.values().toArray()[0];
+    }
+
+    const idField = target.getField("id");
+
+    if (!idField) {
+      throw new TransformerPluginExecutionError(
+        this.name,
+        `Relation target ${target.name} does not have an id field. A key directive with an explicit type must be provided.`
+      );
+    }
+
+    return idField.type.getTypeName();
+  }
+
   private _getFieldRelation(
     object: ObjectNode | InterfaceNode,
     field: FieldNode
@@ -117,7 +165,12 @@ export class RelationsPlugin implements ITransformerPlugin {
     return parseFieldRelation(object, field, target);
   }
 
-  private _setRelationKey(node: ObjectNode | InterfaceNode | UnionNode, key: string) {
+  private _setRelationKey(
+    node: ObjectNode | InterfaceNode | UnionNode,
+    key: string,
+    typeName = "ID",
+    isNullable = false
+  ) {
     if (isUnionNode(node)) {
       for (const type of node.types ?? []) {
         const unionType = this.context.document.getNodeOrThrow(type.getTypeName());
@@ -142,7 +195,9 @@ export class RelationsPlugin implements ITransformerPlugin {
           key,
           undefined,
           [DirectiveNode.create(UtilityDirective.WRITE_ONLY)],
-          NamedTypeNode.create("ID")
+          isNullable
+            ? NamedTypeNode.create(typeName)
+            : NonNullTypeNode.create(NamedTypeNode.create(typeName))
         )
       );
     }
@@ -237,11 +292,21 @@ export class RelationsPlugin implements ITransformerPlugin {
 
       if (relation.key) {
         if (isBelongsToRelationship(field)) {
-          this._setRelationKey(definition, relation.key);
+          this._setRelationKey(
+            definition,
+            relation.key,
+            this._getKeyTypeName(relation.target),
+            isSemanticNullable(field)
+          );
           continue;
         }
 
-        this._setRelationKey(relation.target, relation.key);
+        this._setRelationKey(
+          relation.target,
+          relation.key,
+          this._getKeyTypeName(definition),
+          isSemanticNullable(field)
+        );
       }
     }
   }

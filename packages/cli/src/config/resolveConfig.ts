@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { access, constants } from "node:fs/promises";
 import path from "node:path";
 import { stripUndef } from "@gqlbase/shared/utils";
 import { Config, DEFAULT_CONFIG } from "./config.js";
@@ -17,18 +17,23 @@ export const DEFAULT_CONFIG_FILES = [
   "gqlbase.config.cjs",
 ] as const;
 
-const resolveConfigFilePath = (filePath?: string): string | null => {
+const resolveConfigFilePath = async (filePath?: string): Promise<string | null> => {
   if (filePath) {
-    if (!existsSync(path.resolve(process.cwd(), filePath))) {
+    try {
+      await access(path.resolve(process.cwd(), filePath), constants.F_OK);
+      return path.resolve(process.cwd(), filePath);
+    } catch {
       return null;
     }
-
-    return path.resolve(process.cwd(), filePath);
   }
 
   for (const configFile of DEFAULT_CONFIG_FILES) {
-    if (existsSync(path.resolve(process.cwd(), configFile))) {
+    try {
+      await access(path.resolve(process.cwd(), configFile), constants.F_OK);
       return path.resolve(process.cwd(), configFile);
+    } catch {
+      // Continue to next file
+      continue;
     }
   }
 
@@ -37,7 +42,7 @@ const resolveConfigFilePath = (filePath?: string): string | null => {
 
 export const loadConfigFile = async (filePath?: string): Promise<Partial<Config> | null> => {
   try {
-    const resolvedFilePath = resolveConfigFilePath(filePath);
+    const resolvedFilePath = await resolveConfigFilePath(filePath);
 
     if (!resolvedFilePath) {
       console.warn(`No configuration file found. Searched for: ${DEFAULT_CONFIG_FILES.join(", ")}`);

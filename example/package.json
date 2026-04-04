@@ -7,8 +7,8 @@
   "private": true,
   "sideEffects": false,
   "scripts": {
-    "codegen": "gqlbase --verbose",
-    "watch": "gqlbase --watch --verbose"
+    "codegen": "gqlbase",
+    "watch": "gqlbase --watch"
   },
   "dependencies": {
     "@middy-appsync/graphql": "^0.1.1",

@@ -426,10 +426,11 @@ export class ModelPlugin implements ITransformerPlugin {
     forceNullable = false,
     level = 0
   ): TypeNode {
-    if (
-      (typeNode instanceof NonNullTypeNode && typeNode.type instanceof ListTypeNode) ||
-      typeNode instanceof ListTypeNode
-    ) {
+    if (typeNode instanceof NonNullTypeNode) {
+      return this._createInputValueNode(field, typeNode.type, forceNullable, level);
+    }
+
+    if (typeNode instanceof ListTypeNode) {
       const valueTypeNode = ListTypeNode.create(
         this._createInputValueNode(field, typeNode.type, false, level + 1)
       );

@@ -294,7 +294,7 @@ type InventoryRecord implements Node & Timestamped & Versioned
   variant: ProductVariant @belongsTo @semanticNonNull
   adjustments: [InventoryAdjustment]
     @hasMany
-    @semanticNonNull(levles: [0, 1])
+    @semanticNonNull(levels: [0, 1])
     @scope(allow: [ADMIN, VENDOR])
 }
 

@@ -7,7 +7,7 @@ import { drizzleSchemaGeneratorPlugin } from "@gqlbase/plugins/drizzle";
 export default defineConfig({
   source: "src/schema",
   output: "generated",
-  verbose: true,
+  verbose: false,
   plugins: [
     basePreset(),
     relayPreset(),
