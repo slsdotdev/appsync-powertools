@@ -23,6 +23,13 @@ export default defineConfig({
     drizzleSchemaGeneratorPlugin({
       scalarMap: {
         Decimal: "varchar",
+        DateTime: {
+          type: "timestamp",
+          config: {
+            withTimezone: false,
+            mode: "string",
+          },
+        },
       },
     }),
   ],

@@ -249,7 +249,7 @@ describe("DrizzleSchemaGeneratorPlugin", () => {
         ["User"]
       );
 
-      expect(output).toContain('metadata: jsonb("metadata").notNull()');
+      expect(output).toContain('metadata: json("metadata").notNull()');
     });
 
     it("maps URL to text()", () => {

@@ -1,7 +1,7 @@
 import ts from "typescript";
 import { createPluginFactory, ITransformerContext, TransformerPluginBase } from "@gqlbase/core";
 import { isBuildInScalar } from "@gqlbase/shared/definition";
-import { createFileHeaders } from "@gqlbase/shared/codegen";
+import { createFileHeaders, jsonToObjectAst } from "@gqlbase/shared/codegen";
 import { getTypeHint, isInternal } from "@gqlbase/core/plugins";
 import {
   DefinitionNode,
@@ -17,7 +17,6 @@ import {
   ObjectNode,
 } from "@gqlbase/core/definition";
 import { TransformerPluginExecutionError } from "@gqlbase/shared/errors";
-import { isBaseScalar } from "../../base/ScalarsPlugin/ScalarsPlugin.utils.js";
 import { isClientOnly } from "../../base/UtilitiesPlugin/index.js";
 import { isSemanticNullable } from "../../base/RfcFeaturesPlugin/index.js";
 import { isRelationField } from "../../base/RelationsPlugin/index.js";
@@ -25,10 +24,10 @@ import { isModel } from "../../base/ModelPlugin/ModelPlugin.utils.js";
 import {
   type DrizzleSchemaGeneratorPluginOptions,
   mergeOptions,
-  PG_SCALAR_MAP,
-  TYPE_HINT_DRIZZLE_MAP,
   toTableName,
   toTableVarName,
+  resolveScalarType,
+  resolveTypeHintType,
 } from "./DrizzleSchemaGeneratorPlugin.utils.js";
 import { camelCase, snakeCase } from "@gqlbase/shared/format";
 
@@ -126,30 +125,33 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
     return isInternal(field) || isClientOnly(field) || isRelationField(field);
   }
 
-  private _resolveScalarColumnFn(typeName: string): string {
-    // 1. User-provided scalarMap
-    if (this.options.scalarMap[typeName]) {
-      return this.options.scalarMap[typeName];
+  private _resolveScalarColumn(typeName: string, columnDbName: string): ts.Expression {
+    let columnType = resolveScalarType(typeName, this.options);
+
+    if (!columnType) {
+      const typeDef = this.context.document.getNodeOrThrow(typeName);
+
+      if (isScalarNode(typeDef)) {
+        const hint = getTypeHint(typeDef);
+        columnType = resolveTypeHintType(hint);
+      }
+
+      if (!columnType) {
+        throw new TransformerPluginExecutionError(
+          this.name,
+          `Unsupported scalar type "${typeName}". Please provide a mapping via options.scalarMap or ensure the scalar has a valid @gqlbase_typehint.`
+        );
+      }
     }
 
-    // 2. Built-in GraphQL scalars
-    if (isBuildInScalar(typeName)) {
-      return PG_SCALAR_MAP[typeName];
+    const callArgs: ts.Expression[] = [ts.factory.createStringLiteral(columnDbName)];
+
+    if (columnType.config) {
+      callArgs.push(jsonToObjectAst(columnType.config));
     }
 
-    // 3. gqlbase base scalars
-    if (isBaseScalar(typeName)) {
-      return PG_SCALAR_MAP[typeName];
-    }
-
-    // 4. Custom scalar — fall back to @gqlbase_typehint
-    const typeDef = this.context.document.getNode(typeName);
-    if (typeDef && isScalarNode(typeDef)) {
-      const hint = getTypeHint(typeDef);
-      return TYPE_HINT_DRIZZLE_MAP[hint] ?? "text";
-    }
-
-    return "text";
+    this.drizzleImports.add(columnType.type);
+    return this._callExp(columnType.type, callArgs);
   }
 
   private _isPrimaryKey(field: FieldNode): boolean {
@@ -185,26 +187,21 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
     const columnDbName = snakeCase(field.name);
 
     if (isBuildInScalar(fieldTypeName)) {
-      const drizzleType = this._resolveScalarColumnFn(fieldTypeName);
-
-      this.drizzleImports.add(drizzleType);
-      const column = this._callExp(drizzleType, [ts.factory.createStringLiteral(columnDbName)]);
+      const column = this._resolveScalarColumn(fieldTypeName, columnDbName);
       return this._applyColumnContraints(column, field);
     }
 
     const typeDef = this.context.document.getNodeOrThrow(fieldTypeName);
 
     if (isScalarNode(typeDef)) {
-      const drizzleType = this._resolveScalarColumnFn(fieldTypeName);
-
-      this.drizzleImports.add(drizzleType);
-      const column = this._callExp(drizzleType, [ts.factory.createStringLiteral(columnDbName)]);
+      const column = this._resolveScalarColumn(fieldTypeName, columnDbName);
       return this._applyColumnContraints(column, field);
     }
 
     if (isEnumNode(typeDef)) {
       const enumVarName = camelCase(fieldTypeName, "enum");
       const column = this._callExp(enumVarName, [ts.factory.createStringLiteral(columnDbName)]);
+
       return this._applyColumnContraints(column, field);
     }
 

@@ -1,10 +1,19 @@
+import { BuildInScalar, isBuildInScalar } from "@gqlbase/shared/definition";
 import { snakeCase, pluralize, camelCase } from "@gqlbase/shared/format";
+import { BaseScalarName, isBaseScalar } from "../../base/index.js";
+import { JsonValue } from "@gqlbase/shared/codegen";
+import { TypeHintValueType } from "@gqlbase/core/plugins";
+
+export interface ScalarConfig {
+  type: string;
+  config?: Record<string, JsonValue>;
+}
 
 export interface DrizzleSchemaGeneratorPluginOptions {
   dialect?: "postgresql" | "mysql" | "sqlite";
   fileName?: string;
   emitOutput?: boolean;
-  scalarMap?: Record<string, string>;
+  scalarMap?: Record<string, string | ScalarConfig>;
 }
 
 export const DEFAULT_OPTIONS: Required<Omit<DrizzleSchemaGeneratorPluginOptions, "scalarMap">> & {
@@ -24,32 +33,35 @@ export const mergeOptions = (options: DrizzleSchemaGeneratorPluginOptions = {}) 
   };
 };
 
-/**
- * Maps built-in GraphQL scalars and gqlbase base scalars to Drizzle pg-core column functions.
- * Custom scalars (e.g. Decimal) must be provided via `options.scalarMap`.
- */
-export const PG_SCALAR_MAP: Record<string, string> = {
+export const PG_BUILITIN_SCALAR_MAP: Record<BuildInScalar, string> = {
   ID: "uuid",
   String: "text",
   Int: "integer",
   Float: "doublePrecision",
   Boolean: "boolean",
+};
+
+/**
+ * Maps built-in GraphQL scalars and gqlbase base scalars to Drizzle pg-core column functions.
+ * Custom scalars (e.g. Decimal) must be provided via `options.scalarMap`.
+ */
+export const PG_BASE_SCALAR_MAP: Record<BaseScalarName, string> = {
   UUID: "uuid",
   DateTime: "timestamp",
   Date: "date",
   Time: "time",
-  Timestamp: "timestamp",
+  Timestamp: "integer",
   URL: "text",
   EmailAddress: "text",
   PhoneNumber: "text",
   IPAddress: "text",
-  JSON: "jsonb",
+  JSON: "json",
 };
 
 /**
  * Fallback mapping from @gqlbase_typehint values to Drizzle pg-core column functions.
  */
-export const TYPE_HINT_DRIZZLE_MAP: Record<string, string> = {
+export const TYPE_HINT_DRIZZLE_MAP: Record<TypeHintValueType, string> = {
   id: "uuid",
   string: "text",
   number: "doublePrecision",
@@ -66,20 +78,31 @@ export function toTableVarName(typeName: string): string {
   return camelCase(pluralize(typeName));
 }
 
-export function toColumnValue(typeName: string, options: DrizzleSchemaGeneratorPluginOptions) {
-  if (options.scalarMap && options.scalarMap[typeName]) {
-    return options.scalarMap[typeName];
+export function resolveScalarType(
+  typeName: string,
+  options: DrizzleSchemaGeneratorPluginOptions
+): ScalarConfig | null {
+  if (options.scalarMap?.[typeName]) {
+    const mapping = options.scalarMap[typeName];
+
+    if (typeof mapping === "string") {
+      return { type: mapping };
+    } else {
+      return mapping;
+    }
   }
 
-  if (PG_SCALAR_MAP[typeName]) {
-    return PG_SCALAR_MAP[typeName];
+  if (isBuildInScalar(typeName)) {
+    return { type: PG_BUILITIN_SCALAR_MAP[typeName] };
   }
 
-  if (TYPE_HINT_DRIZZLE_MAP[typeName]) {
-    return TYPE_HINT_DRIZZLE_MAP[typeName];
+  if (isBaseScalar(typeName)) {
+    return { type: PG_BASE_SCALAR_MAP[typeName] };
   }
 
-  throw new Error(
-    `Unsupported type "${typeName}". Please provide a mapping for this type in the plugin options.`
-  );
+  return null;
 }
+
+export const resolveTypeHintType = (typeHint: TypeHintValueType): ScalarConfig => {
+  return { type: TYPE_HINT_DRIZZLE_MAP[typeHint] };
+};
