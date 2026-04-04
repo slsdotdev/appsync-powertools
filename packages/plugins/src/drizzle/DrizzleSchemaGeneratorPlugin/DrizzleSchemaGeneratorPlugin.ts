@@ -34,9 +34,8 @@ import { camelCase, snakeCase } from "@gqlbase/shared/format";
 export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
   private nodes: ts.Node[] = [];
   private options: ReturnType<typeof mergeOptions>;
-  private enumNames = new Set<string>();
   private drizzleImports = new Set<string>();
-  private jsonbTypeImports = new Set<string>();
+  private typeImports = new Set<string>();
 
   constructor(context: ITransformerContext, options: DrizzleSchemaGeneratorPluginOptions = {}) {
     super("DrizzleSchemaGeneratorPlugin", context);
@@ -207,7 +206,7 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
 
     if (isObjectLike(typeDef) && !isModel(typeDef) && !isOperationNode(typeDef)) {
       this.drizzleImports.add("json");
-      this.jsonbTypeImports.add(fieldTypeName);
+      this.typeImports.add(fieldTypeName);
 
       const columnType = this._callExp("json", [ts.factory.createStringLiteral(columnDbName)]);
       const typeRef = ts.factory.createTypeReferenceNode(fieldTypeName);
@@ -233,7 +232,6 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
     }
 
     this.drizzleImports.add("pgEnum");
-    this.enumNames.add(definition.name);
 
     const enumDbName = snakeCase(definition.name);
     const enumVarName = camelCase(definition.name, "enum");
@@ -245,6 +243,22 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
     ]);
 
     this.nodes.push(this._createExportedConst(enumVarName, initializer));
+  }
+
+  private _generateTableRelations(definition: ObjectNode, tableVarName: string) {
+    const relations: ts.Expression[] = [];
+
+    for (const field of definition.fields ?? []) {
+      if (isRelationField(field)) {
+        const relatedTableName = toTableVarName(field.type.getTypeName());
+        relations.push(ts.factory.createIdentifier(relatedTableName));
+      }
+    }
+
+    if (relations.length > 0) {
+      const initializer = this._callExp("relations", [ts.factory.createIdentifier(tableVarName)]);
+      this.nodes.push(this._createExportedConst(camelCase(tableVarName, "relations"), initializer));
+    }
   }
 
   private _generateTable(definition: ObjectNode) {
@@ -273,13 +287,13 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
     ]);
 
     this.nodes.push(this._createExportedConst(tableVarName, initializer));
+    this._generateTableRelations(definition, tableVarName);
   }
 
   public before() {
     this.nodes = [];
-    this.enumNames.clear();
     this.drizzleImports.clear();
-    this.jsonbTypeImports.clear();
+    this.typeImports.clear();
   }
 
   public match(definition: DefinitionNode): boolean {
@@ -303,7 +317,7 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
 
   public output() {
     const headers = createFileHeaders();
-    const importNodes: ts.Node[] = [];
+    const importNodes: ts.Node[] = [this._createNamedImport(["relations"], "drizzle-orm")];
 
     if (this.drizzleImports.size > 0) {
       importNodes.push(
@@ -311,9 +325,9 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
       );
     }
 
-    if (this.jsonbTypeImports.size > 0) {
+    if (this.typeImports.size > 0) {
       importNodes.push(
-        this._createTypeOnlyNamedImport([...this.jsonbTypeImports].sort(), "../models.typegen.js")
+        this._createTypeOnlyNamedImport([...this.typeImports].sort(), "../models.typegen.js")
       );
     }
 

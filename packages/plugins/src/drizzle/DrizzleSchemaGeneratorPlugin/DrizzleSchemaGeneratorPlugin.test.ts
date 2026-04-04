@@ -234,7 +234,7 @@ describe("DrizzleSchemaGeneratorPlugin", () => {
       expect(output).toContain('birthday: date("birthday")');
     });
 
-    it("maps JSON! to jsonb()", () => {
+    it("maps JSON! to json()", () => {
       const output = generateSchema(
         plugin,
         context,

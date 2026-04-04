@@ -7,7 +7,7 @@ export default defineConfig({
     globals: true,
     passWithNoTests: true,
     coverage: {
-      reportsDirectory: "../../coverage/packages/core",
+      reportsDirectory: "../../coverage/core",
     },
   },
 });
