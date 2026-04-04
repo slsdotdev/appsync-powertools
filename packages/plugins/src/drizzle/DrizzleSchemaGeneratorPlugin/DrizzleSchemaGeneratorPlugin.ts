@@ -10,6 +10,7 @@ import {
   isDirectiveDefinitionNode,
   isEnumNode,
   isListTypeNode,
+  isObjectLike,
   isObjectNode,
   isOperationNode,
   isScalarNode,
@@ -28,10 +29,8 @@ import {
   TYPE_HINT_DRIZZLE_MAP,
   toTableName,
   toTableVarName,
-  toColumnName,
-  toEnumVarName,
-  toEnumDbName,
 } from "./DrizzleSchemaGeneratorPlugin.utils.js";
+import { camelCase, snakeCase } from "@gqlbase/shared/format";
 
 export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
   private nodes: ts.Node[] = [];
@@ -62,37 +61,20 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
     return printer.printList(ts.ListFormat.MultiLine, ts.factory.createNodeArray(nodes), file);
   }
 
-  private _call(name: string, args: ts.Expression[] = []): ts.Expression {
+  private _callExp(name: string, args: ts.Expression[] = []): ts.Expression {
     return ts.factory.createCallExpression(ts.factory.createIdentifier(name), undefined, args);
   }
 
-  private _callWithStringArg(name: string, arg: string): ts.Expression {
-    return ts.factory.createCallExpression(ts.factory.createIdentifier(name), undefined, [
-      ts.factory.createStringLiteral(arg),
-    ]);
-  }
-
-  private _chainCall(
+  private _chainCallExp(
     expr: ts.Expression,
     method: string,
-    args: ts.Expression[] = []
+    args: ts.Expression[] = [],
+    typeArgs: ts.TypeNode[] | undefined = undefined
   ): ts.Expression {
     return ts.factory.createCallExpression(
       ts.factory.createPropertyAccessExpression(expr, ts.factory.createIdentifier(method)),
-      undefined,
+      typeArgs,
       args
-    );
-  }
-
-  private _chainCallWithTypeArg(
-    expr: ts.Expression,
-    method: string,
-    typeArg: string
-  ): ts.Expression {
-    return ts.factory.createCallExpression(
-      ts.factory.createPropertyAccessExpression(expr, ts.factory.createIdentifier(method)),
-      [ts.factory.createTypeReferenceNode(typeArg)],
-      []
     );
   }
 
@@ -144,11 +126,6 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
     return isInternal(field) || isClientOnly(field) || isRelationField(field);
   }
 
-  private _isNestedValueType(typeName: string): boolean {
-    const node = this.context.document.getNode(typeName);
-    return !!node && isObjectNode(node) && !isModel(node) && !isOperationNode(node);
-  }
-
   private _resolveScalarColumnFn(typeName: string): string {
     // 1. User-provided scalarMap
     if (this.options.scalarMap[typeName]) {
@@ -175,53 +152,79 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
     return "text";
   }
 
-  private _createColumnExpression(field: FieldNode): ts.Expression {
-    const fieldTypeName = field.type.getTypeName();
-    const columnDbName = toColumnName(field.name);
-    const isList = isListTypeNode(field.type);
+  private _isPrimaryKey(field: FieldNode): boolean {
+    return field.name === "id";
+  }
 
-    let expr: ts.Expression;
+  private _applyColumnContraints(column: ts.Expression, field: FieldNode): ts.Expression {
+    let expr = column;
 
-    if (this._isNestedValueType(fieldTypeName)) {
-      // jsonb("column_name").$type<TypeName>()
-      this.drizzleImports.add("jsonb");
-      this.jsonbTypeImports.add(fieldTypeName);
-      expr = this._callWithStringArg("jsonb", columnDbName);
-      expr = this._chainCallWithTypeArg(expr, "$type", fieldTypeName);
-    } else if (this.enumNames.has(fieldTypeName)) {
-      // enumVarName("column_name")
-      const enumVarName = toEnumVarName(fieldTypeName);
-      expr = this._callWithStringArg(enumVarName, columnDbName);
-    } else {
-      // scalar("column_name")
-      const drizzleFn = this._resolveScalarColumnFn(fieldTypeName);
-      this.drizzleImports.add(drizzleFn);
-      expr = this._callWithStringArg(drizzleFn, columnDbName);
-    }
-
-    // Apply special defaults before array/notNull
-    if (field.name === "id" && (fieldTypeName === "UUID" || fieldTypeName === "ID")) {
-      expr = this._chainCall(expr, "primaryKey");
-      expr = this._chainCall(expr, "defaultRandom");
+    if (this._isPrimaryKey(field)) {
+      expr = this._chainCallExp(expr, "primaryKey");
+      expr = this._chainCallExp(expr, "defaultRandom");
       return expr; // id is always non-null via primaryKey, skip further processing
     }
 
-    const isTimestampDefault =
-      (field.name === "createdAt" || field.name === "updatedAt") && fieldTypeName === "DateTime";
-
-    if (isTimestampDefault) {
-      expr = this._chainCall(expr, "defaultNow");
-    }
-
-    if (isList) {
-      expr = this._chainCall(expr, "array");
+    if (isListTypeNode(field.type)) {
+      expr = this._chainCallExp(expr, "array");
     }
 
     if (!isSemanticNullable(field)) {
-      expr = this._chainCall(expr, "notNull");
+      expr = this._chainCallExp(expr, "notNull");
     }
 
+    // TODO: aditional contraints based on `parseConstraints(field)` from UtilitiesPlugin and passed as options, eg. dates as text.
+    // some `base` scalars will also have predefined constrains, like EmailAddress, IPAddress, URL, etc. which we can apply here as well.
+    // For defaults, we should consider register directives so we can reliably identify them here, instead of relying on heuristics like field name + type.
+
     return expr;
+  }
+
+  private _createColumnExpression(field: FieldNode): ts.Expression {
+    const fieldTypeName = field.type.getTypeName();
+    const columnDbName = snakeCase(field.name);
+
+    if (isBuildInScalar(fieldTypeName)) {
+      const drizzleType = this._resolveScalarColumnFn(fieldTypeName);
+
+      this.drizzleImports.add(drizzleType);
+      const column = this._callExp(drizzleType, [ts.factory.createStringLiteral(columnDbName)]);
+      return this._applyColumnContraints(column, field);
+    }
+
+    const typeDef = this.context.document.getNodeOrThrow(fieldTypeName);
+
+    if (isScalarNode(typeDef)) {
+      const drizzleType = this._resolveScalarColumnFn(fieldTypeName);
+
+      this.drizzleImports.add(drizzleType);
+      const column = this._callExp(drizzleType, [ts.factory.createStringLiteral(columnDbName)]);
+      return this._applyColumnContraints(column, field);
+    }
+
+    if (isEnumNode(typeDef)) {
+      const enumVarName = camelCase(fieldTypeName, "enum");
+      const column = this._callExp(enumVarName, [ts.factory.createStringLiteral(columnDbName)]);
+      return this._applyColumnContraints(column, field);
+    }
+
+    if (isObjectLike(typeDef) && !isModel(typeDef) && !isOperationNode(typeDef)) {
+      this.drizzleImports.add("json");
+      this.jsonbTypeImports.add(fieldTypeName);
+
+      const columnType = this._callExp("json", [ts.factory.createStringLiteral(columnDbName)]);
+      const typeRef = ts.factory.createTypeReferenceNode(fieldTypeName);
+
+      return this._applyColumnContraints(
+        this._chainCallExp(columnType, "$type", [], [typeRef]),
+        field
+      );
+    }
+
+    throw new TransformerPluginExecutionError(
+      this.name,
+      `Unsupported field type "${field.type.getTypeName()}" for field "${field.name}".`
+    );
   }
 
   private _generateEnum(definition: EnumNode) {
@@ -235,11 +238,11 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
     this.drizzleImports.add("pgEnum");
     this.enumNames.add(definition.name);
 
-    const enumDbName = toEnumDbName(definition.name);
-    const enumVarName = toEnumVarName(definition.name);
+    const enumDbName = snakeCase(definition.name);
+    const enumVarName = camelCase(definition.name, "enum");
     const values = definition.values.map((v) => ts.factory.createStringLiteral(v.name));
 
-    const initializer = this._call("pgEnum", [
+    const initializer = this._callExp("pgEnum", [
       ts.factory.createStringLiteral(enumDbName),
       ts.factory.createArrayLiteralExpression(values),
     ]);
@@ -261,12 +264,13 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
       }
 
       const columnExpr = this._createColumnExpression(field);
+
       columnProperties.push(
         ts.factory.createPropertyAssignment(ts.factory.createIdentifier(field.name), columnExpr)
       );
     }
 
-    const initializer = this._call("pgTable", [
+    const initializer = this._callExp("pgTable", [
       ts.factory.createStringLiteral(tableName),
       ts.factory.createObjectLiteralExpression(columnProperties, true),
     ]);
@@ -312,7 +316,7 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
 
     if (this.jsonbTypeImports.size > 0) {
       importNodes.push(
-        this._createTypeOnlyNamedImport([...this.jsonbTypeImports].sort(), "./types.typegen.js")
+        this._createTypeOnlyNamedImport([...this.jsonbTypeImports].sort(), "../models.typegen.js")
       );
     }
 
@@ -331,5 +335,4 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
   }
 }
 
-export const drizzleSchemaGeneratorPlugin =
-  createPluginFactory<DrizzleSchemaGeneratorPluginOptions>(DrizzleSchemaGeneratorPlugin);
+export const drizzleSchemaGeneratorPlugin = createPluginFactory(DrizzleSchemaGeneratorPlugin);

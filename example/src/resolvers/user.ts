@@ -1,8 +1,6 @@
 import { createQueryResolver, createResolver, defineResolvers } from "@middy-appsync/graphql";
 import { isCognito } from "@middy-appsync/graphql/utils";
-import { eq } from "drizzle-orm";
 import { db } from "../lib/db";
-import { users } from "../../generated/drizzle/schema";
 
 export const queryMe = createQueryResolver({
   fieldName: "me",
@@ -11,39 +9,34 @@ export const queryMe = createQueryResolver({
       throw new Error("Unauthorized");
     }
 
-    const user = await db
-      .select({
-        id: users.id,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        displayName: users.displayName,
-        email: users.email,
-        phone: users.phone,
-        roles: users.roles,
-        avatarUrl: users.avatarUrl,
-        emailVerifiedAt: users.emailVerifiedAt,
-        version: users.version,
-        createdAt: users.createdAt,
-        updatedAt: users.updatedAt,
-      })
-      .from(users)
-      .where(eq(users.id, identity.sub))
-      .limit(1)
-      .then((res) => res[0]);
+    const user = await db.query.users.findFirst({
+      where: (user, { eq }) => eq(user.id, identity.sub),
+    });
 
-    return {
-      ...user,
-      __typename: "User",
-    };
+    if (!user) {
+      return null;
+    }
+
+    return { ...user, __typename: "User" };
   },
 });
 
 const userAddresses = createResolver({
   typeName: "User",
   fieldName: "addresses",
-  resolve: async () => {
+  resolve: async ({ source, args }) => {
+    const userAddresses = await db.query.addresses.findMany({
+      where: (address, { eq }) => eq(address.userId, source.id),
+      limit: args.first ?? 100,
+    });
+
+    const edges = userAddresses.map((address) => ({
+      cursor: address.id,
+      node: address,
+    }));
+
     return {
-      edges: [],
+      edges,
       pageInfo: {
         hasNextPage: false,
         hasPreviousPage: false,

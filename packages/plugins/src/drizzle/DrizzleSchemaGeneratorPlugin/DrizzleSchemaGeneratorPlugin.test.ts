@@ -414,42 +414,6 @@ describe("DrizzleSchemaGeneratorPlugin", () => {
 
       expect(output).toContain('id: uuid("id").primaryKey().defaultRandom()');
     });
-
-    it("generates .defaultNow() for createdAt: DateTime", () => {
-      const output = generateSchema(
-        plugin,
-        context,
-        /* GraphQL */ `
-          type User @model {
-            createdAt: DateTime @readOnly @semanticNonNull
-          }
-          type Query {
-            me: User
-          }
-        `,
-        ["User"]
-      );
-
-      expect(output).toContain('createdAt: timestamp("created_at").defaultNow().notNull()');
-    });
-
-    it("generates .defaultNow() for updatedAt: DateTime", () => {
-      const output = generateSchema(
-        plugin,
-        context,
-        /* GraphQL */ `
-          type User @model {
-            updatedAt: DateTime @readOnly @semanticNonNull
-          }
-          type Query {
-            me: User
-          }
-        `,
-        ["User"]
-      );
-
-      expect(output).toContain('updatedAt: timestamp("updated_at").defaultNow().notNull()');
-    });
   });
 
   describe("array fields", () => {
@@ -587,7 +551,7 @@ describe("DrizzleSchemaGeneratorPlugin", () => {
         ["Money", "Product"]
       );
 
-      expect(output).toContain('price: jsonb("price").$type<Money>().notNull()');
+      expect(output).toContain('price: json("price").$type<Money>().notNull()');
     });
 
     it("does not generate a table for non-@model object types", () => {

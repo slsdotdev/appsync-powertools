@@ -38,7 +38,7 @@ export const PG_SCALAR_MAP: Record<string, string> = {
   DateTime: "timestamp",
   Date: "date",
   Time: "time",
-  Timestamp: "integer",
+  Timestamp: "timestamp",
   URL: "text",
   EmailAddress: "text",
   PhoneNumber: "text",
@@ -66,14 +66,20 @@ export function toTableVarName(typeName: string): string {
   return camelCase(pluralize(typeName));
 }
 
-export function toColumnName(fieldName: string): string {
-  return snakeCase(fieldName);
-}
+export function toColumnValue(typeName: string, options: DrizzleSchemaGeneratorPluginOptions) {
+  if (options.scalarMap && options.scalarMap[typeName]) {
+    return options.scalarMap[typeName];
+  }
 
-export function toEnumVarName(enumName: string): string {
-  return camelCase(enumName) + "Enum";
-}
+  if (PG_SCALAR_MAP[typeName]) {
+    return PG_SCALAR_MAP[typeName];
+  }
 
-export function toEnumDbName(enumName: string): string {
-  return snakeCase(enumName);
+  if (TYPE_HINT_DRIZZLE_MAP[typeName]) {
+    return TYPE_HINT_DRIZZLE_MAP[typeName];
+  }
+
+  throw new Error(
+    `Unsupported type "${typeName}". Please provide a mapping for this type in the plugin options.`
+  );
 }
