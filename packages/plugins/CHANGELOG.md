@@ -1,5 +1,13 @@
 # @gqlbase/plugins
 
+## 0.1.5
+
+### Patch Changes
+
+- c265909: Added DrizzleSchemaGenerator plugin
+  - @gqlbase/core@0.1.5
+  - @gqlbase/shared@0.1.5
+
 ## 0.1.4
 
 ### Patch Changes
