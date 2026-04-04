@@ -17,6 +17,9 @@
   },
   "devDependencies": {
     "@gqlbase/cli": "^0.1.4",
-    "@types/aws-lambda": "^8.10.161"
+    "@types/aws-lambda": "^8.10.161",
+    "@types/pg": "^8.20.0",
+    "drizzle-kit": "^0.31.10",
+    "tsx": "^4.21.0"
   }
 }

@@ -11,13 +11,12 @@ export const queryMe = createQueryResolver({
 
     const user = await db.query.users.findFirst({
       where: (user, { eq }) => eq(user.id, identity.sub),
+      with: {
+        vendorMembership: true,
+      },
     });
 
-    if (!user) {
-      return null;
-    }
-
-    return { ...user, __typename: "User" };
+    return user ?? null;
   },
 });
 

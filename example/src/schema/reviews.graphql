@@ -108,8 +108,8 @@ type ReviewVote implements Node & Timestamped @model @scope(allow: [SHOP]) {
 
   vote: ReviewVoteType!
 
-  review: Review! @hasOne
-  user: User! @hasOne
+  review: Review! @belongsTo
+  user: User! @belongsTo
 
   createdAt: DateTime! @readOnly
   updatedAt: DateTime! @readOnly

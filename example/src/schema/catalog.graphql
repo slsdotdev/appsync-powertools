@@ -18,6 +18,7 @@ type Category implements Timestamped & SoftDeletable
   @scope(allow: [ADMIN, VENDOR, SHOP])
   @cacheControl(maxAge: 7200, scope: PUBLIC) {
   id: UUID!
+  parentId: UUID @serverOnly
 
   name: String @semanticNonNull @constraint(min: 1, max: 120)
   slug: String @semanticNonNull @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", max: 80)
@@ -25,7 +26,6 @@ type Category implements Timestamped & SoftDeletable
   iconUrl: URL
   sortOrder: Int @semanticNonNull
 
-  parentId: UUID @serverOnly
   parent: Category @belongsTo
   children: Category @hasMany(key: "parentId")
   products: Product @hasMany
@@ -47,7 +47,6 @@ type Product implements Auditable & SoftDeletable & Versioned
   @model
   @scope(allow: [ADMIN, VENDOR, SHOP]) {
   id: UUID!
-  version: Int! @readOnly
 
   name: String @semanticNonNull @constraint(min: 1, max: 200)
   slug: String @semanticNonNull @constraint(pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$", max: 120)
@@ -104,7 +103,7 @@ type Product implements Auditable & SoftDeletable & Versioned
   """
   Lowest current variant price, for display in listing cards.
   """
-  startingPrice: Money @clientOnly @readOnly
+  startingPrice: Money @clientOnly @readOnly @semanticNonNull
 }
 
 enum ProductStatus {
@@ -250,7 +249,7 @@ type ProductVariant implements Node & Timestamped & Versioned
   sortOrder: Int @semanticNonNull
 
   product: Product @belongsTo @semanticNonNull
-  inventory: InventoryRecord @hasOne(key: "variantId")
+  inventory: InventoryRecord @hasOne(key: "variantId") @semanticNonNull
 }
 
 # ------------------------------------------------------------------------------
@@ -293,7 +292,10 @@ type InventoryRecord implements Node & Timestamped & Versioned
   quantityAvailable: Int @semanticNonNull @clientOnly @readOnly
 
   variant: ProductVariant @belongsTo @semanticNonNull
-  adjustments: [InventoryAdjustment] @hasMany @semanticNonNull @scope(allow: [ADMIN, VENDOR])
+  adjustments: [InventoryAdjustment]
+    @hasMany
+    @semanticNonNull(levles: [0, 1])
+    @scope(allow: [ADMIN, VENDOR])
 }
 
 """

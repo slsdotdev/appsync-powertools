@@ -30,6 +30,68 @@ import {
   resolveTypeHintType,
 } from "./DrizzleSchemaGeneratorPlugin.utils.js";
 import { camelCase, snakeCase } from "@gqlbase/shared/format";
+import {
+  isBelongsToRelationship,
+  isManyRelationship,
+  isOneRelationship,
+  isPaginationConnection,
+  parseFieldRelation,
+  RelationTarget,
+} from "../../base/RelationsPlugin/RelationsPlugin.utils.js";
+import { isRelayConnection, isRelayEdge } from "../../relay/index.js";
+
+/**
+ * Generates Drizzle schema definitions based on the GraphQL schema. Supports PostgreSQL, MySQL, and SQLite via configurable scalar mappings.
+ *
+ * @example
+ * ```graphql
+ * # schema.graphql
+ * type User `@model` {
+ *   id: ID!
+ *   email: String!
+ *   name: String!
+ *   nickname: String
+ *   posts: Post! `@hasMany`
+ * }
+ *
+ * type Post `@model` {
+ *   id: ID!
+ *   title: String!
+ *   content: String
+ * }
+ * ```
+ *
+ * ```ts
+ * // drizzle/schema.ts (generated)
+ * import { relations } from "drizzle-orm";
+ * import { pgTable, uuid, text } from "drizzle-orm/pg-core";
+ *
+ * export const users = pgTable("users", {
+ *  id: uuid("id").primaryKey().defaultRandom(),
+ *  email: text("email").notNull(),
+ *  name: text("name").notNull(),
+ *  nickname: text("nickname")
+ * });
+ *
+ * export const usersRelations = relations(users, ({ many }) => ({
+ *  posts: many(posts)
+ * }));
+ *
+ * export const posts = pgTable("posts", {
+ *  id: uuid("id").primaryKey().defaultRandom(),
+ *  userId: uuid("user_id").notNull(),
+ *  title: text("title").notNull(),
+ *  content: text("content")
+ * }));
+ *
+ * export const postsRelations = relations(posts, ({ one }) => ({
+ *  user: one(users, {
+ *    fields: [posts.userId],
+ *    references: [users.id],
+ *  })
+ * }));
+ *
+ */
 
 export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
   private nodes: ts.Node[] = [];
@@ -76,6 +138,25 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
     );
   }
 
+  private _objectLiteralExp(
+    props: [propName: string, arrAccess: [idLeft: string, idRight: string]][]
+  ): ts.Expression {
+    return ts.factory.createObjectLiteralExpression(
+      props.map(([propName, [idl, idr]]) =>
+        ts.factory.createPropertyAssignment(
+          ts.factory.createIdentifier(propName),
+          ts.factory.createArrayLiteralExpression([
+            ts.factory.createPropertyAccessExpression(
+              ts.factory.createIdentifier(idl),
+              ts.factory.createIdentifier(idr)
+            ),
+          ])
+        )
+      ),
+      true
+    );
+  }
+
   private _createExportedConst(name: string, initializer: ts.Expression): ts.VariableStatement {
     return ts.factory.createVariableStatement(
       [ts.factory.createModifier(ts.SyntaxKind.ExportKeyword)],
@@ -86,7 +167,11 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
     );
   }
 
-  private _createNamedImport(names: string[], from: string): ts.ImportDeclaration {
+  private _createNamedImport(
+    from: string,
+    names: string[],
+    isTypeOnly = false
+  ): ts.ImportDeclaration {
     return ts.factory.createImportDeclaration(
       undefined,
       ts.factory.createImportClause(
@@ -94,24 +179,7 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
         undefined,
         ts.factory.createNamedImports(
           names.map((n) =>
-            ts.factory.createImportSpecifier(false, undefined, ts.factory.createIdentifier(n))
-          )
-        )
-      ),
-      ts.factory.createStringLiteral(from),
-      undefined
-    );
-  }
-
-  private _createTypeOnlyNamedImport(names: string[], from: string): ts.ImportDeclaration {
-    return ts.factory.createImportDeclaration(
-      undefined,
-      ts.factory.createImportClause(
-        undefined,
-        undefined,
-        ts.factory.createNamedImports(
-          names.map((n) =>
-            ts.factory.createImportSpecifier(false, undefined, ts.factory.createIdentifier(n))
+            ts.factory.createImportSpecifier(isTypeOnly, undefined, ts.factory.createIdentifier(n))
           )
         )
       ),
@@ -233,7 +301,7 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
 
     this.drizzleImports.add("pgEnum");
 
-    const enumDbName = snakeCase(definition.name);
+    const enumDbName = snakeCase(definition.name, "enum");
     const enumVarName = camelCase(definition.name, "enum");
     const values = definition.values.map((v) => ts.factory.createStringLiteral(v.name));
 
@@ -242,21 +310,150 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
       ts.factory.createArrayLiteralExpression(values),
     ]);
 
-    this.nodes.push(this._createExportedConst(enumVarName, initializer));
+    this.nodes.unshift(this._createExportedConst(enumVarName, initializer));
+  }
+
+  private _resolveConnectionTarget(node: RelationTarget): string {
+    let typeName = node.name;
+
+    if (isObjectNode(node)) {
+      if (isPaginationConnection(node)) {
+        const targetName = node.getField("items")?.type.getTypeName();
+
+        if (targetName) {
+          typeName = targetName;
+        }
+      }
+
+      if (isRelayConnection(node)) {
+        const edgesField = node.getField("edges");
+        const edgeNode = edgesField
+          ? this.context.document.getNodeOrThrow(edgesField.type.getTypeName())
+          : null;
+
+        if (edgeNode && isObjectNode(edgeNode) && isRelayEdge(edgeNode)) {
+          const targetName = edgeNode.getField("node")?.type.getTypeName();
+
+          if (targetName) {
+            typeName = targetName;
+          }
+        }
+      }
+    }
+
+    return typeName;
   }
 
   private _generateTableRelations(definition: ObjectNode, tableVarName: string) {
-    const relations: ts.Expression[] = [];
+    const relations: ts.PropertyAssignment[] = [];
+    const cbParams = new Set<string>();
 
     for (const field of definition.fields ?? []) {
-      if (isRelationField(field)) {
-        const relatedTableName = toTableVarName(field.type.getTypeName());
-        relations.push(ts.factory.createIdentifier(relatedTableName));
+      if (!isRelationField(field)) {
+        continue;
+      }
+
+      const target = this.context.document.getNodeOrThrow(field.type.getTypeName());
+
+      if (!isObjectLike(target)) {
+        throw new TransformerPluginExecutionError(
+          this.name,
+          `Invalid relation target for ${definition.name}.${field.name}: expected object or interface type, found ${target.kind}`
+        );
+      }
+
+      const relation = parseFieldRelation(definition, field, target);
+      const relatedTableVarName = toTableVarName(field.type.getTypeName());
+
+      if (!relation?.key) {
+        throw new TransformerPluginExecutionError(
+          this.name,
+          `Relation key not found for ${definition.name}.${field.name}. Ensure the relation field has a valid @hasOne, @hasMany, or @belongsTo directive with the correct configuration.`
+        );
+      }
+
+      if (isBelongsToRelationship(field)) {
+        // belongsTo (many-to-one) relation, defined on the "many" side, use `one()`
+        cbParams.add("one");
+
+        relations.push(
+          ts.factory.createPropertyAssignment(
+            ts.factory.createIdentifier(field.name),
+            this._callExp("one", [
+              ts.factory.createIdentifier(relatedTableVarName),
+              this._objectLiteralExp([
+                ["fields", [tableVarName, relation.key]],
+                ["references", [relatedTableVarName, "id"]],
+              ]),
+            ])
+          )
+        );
+      }
+
+      if (isOneRelationship(field)) {
+        // one-to-one relation, defined on target side, use `one()`
+        cbParams.add("one");
+
+        relations.push(
+          ts.factory.createPropertyAssignment(
+            ts.factory.createIdentifier(field.name),
+            this._callExp("one", [
+              ts.factory.createIdentifier(relatedTableVarName),
+              this._objectLiteralExp([
+                ["fields", [relatedTableVarName, relation.key]],
+                ["references", [tableVarName, "id"]],
+              ]),
+            ])
+          )
+        );
+      }
+
+      if (isManyRelationship(field)) {
+        // one-to-many relation, defined on the "one" side, use `many()`
+        cbParams.add("many");
+        const relatedTableVarName = toTableVarName(this._resolveConnectionTarget(target));
+
+        relations.push(
+          ts.factory.createPropertyAssignment(
+            ts.factory.createIdentifier(field.name),
+            this._callExp("many", [ts.factory.createIdentifier(relatedTableVarName)])
+          )
+        );
       }
     }
 
     if (relations.length > 0) {
-      const initializer = this._callExp("relations", [ts.factory.createIdentifier(tableVarName)]);
+      const callback = ts.factory.createArrowFunction(
+        undefined,
+        undefined,
+        [
+          ts.factory.createParameterDeclaration(
+            undefined,
+            undefined,
+            ts.factory.createObjectBindingPattern([
+              ...Array.from(cbParams).map((param) =>
+                ts.factory.createBindingElement(
+                  undefined,
+                  undefined,
+                  ts.factory.createIdentifier(param),
+                  undefined
+                )
+              ),
+            ])
+          ),
+        ],
+        undefined,
+        ts.factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
+        ts.factory.createParenthesizedExpression(
+          ts.factory.createObjectLiteralExpression(relations, true)
+        )
+      );
+
+      const initializer = this._callExp("relations", [
+        ts.factory.createIdentifier(tableVarName),
+        callback,
+      ]);
+
       this.nodes.push(this._createExportedConst(camelCase(tableVarName, "relations"), initializer));
     }
   }
@@ -317,17 +514,17 @@ export class DrizzleSchemaGeneratorPlugin extends TransformerPluginBase {
 
   public output() {
     const headers = createFileHeaders();
-    const importNodes: ts.Node[] = [this._createNamedImport(["relations"], "drizzle-orm")];
+    const importNodes: ts.Node[] = [this._createNamedImport("drizzle-orm", ["relations"])];
 
     if (this.drizzleImports.size > 0) {
       importNodes.push(
-        this._createNamedImport([...this.drizzleImports].sort(), "drizzle-orm/pg-core")
+        this._createNamedImport("drizzle-orm/pg-core", [...this.drizzleImports].sort())
       );
     }
 
     if (this.typeImports.size > 0) {
       importNodes.push(
-        this._createTypeOnlyNamedImport([...this.typeImports].sort(), "../models.typegen.js")
+        this._createNamedImport("../models.typegen.js", [...this.typeImports].sort(), true)
       );
     }
 
