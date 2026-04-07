@@ -1,4 +1,5 @@
 CREATE TYPE "public"."access_scope_enum" AS ENUM('ADMIN', 'VENDOR', 'SHOP');--> statement-breakpoint
+CREATE DOMAIN "public"."access_scope_enum" AS "text" CHECK (VALUE IN ('ADMIN', 'VENDOR', 'SHOP'));--> statement-breakpoint
 CREATE TYPE "public"."actor_type_enum" AS ENUM('CUSTOMER', 'VENDOR', 'ADMIN', 'SYSTEM');--> statement-breakpoint
 CREATE TYPE "public"."address_label_enum" AS ENUM('HOME', 'WORK', 'MARKET_PICKUP', 'OTHER');--> statement-breakpoint
 CREATE TYPE "public"."allergen_enum" AS ENUM('MILK', 'EGGS', 'FISH', 'SHELLFISH', 'TREE_NUTS', 'PEANUTS', 'WHEAT', 'SOY', 'SESAME');--> statement-breakpoint

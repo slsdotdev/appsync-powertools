@@ -137,7 +137,7 @@ export class RelationsPlugin implements ITransformerPlugin {
         return "ID";
       }
 
-      return idTypes.values().toArray()[0];
+      return Array.from(idTypes.values())[0];
     }
 
     const idField = target.getField("id");
