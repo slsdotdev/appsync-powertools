@@ -1,4 +1,3 @@
-import { performance } from "node:perf_hooks";
 import { Source } from "graphql";
 import { TransformerValidationError } from "@gqlbase/shared/errors";
 import type { FileArtifact, ITransformerContext } from "../context/index.js";

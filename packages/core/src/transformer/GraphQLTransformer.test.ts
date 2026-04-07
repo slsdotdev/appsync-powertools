@@ -3,7 +3,7 @@ import { Logger } from "@gqlbase/shared/logger";
 import { GraphQLTransformer } from "./GraphQLTransformer.js";
 import { TransformerContext } from "../context/TransformerContext.js";
 import { ITransformerPlugin } from "../plugins/ITransformerPlugin.js";
-import { DefinitionNode } from "../definition/DocumentNode.js";
+import { DefinitionNode } from "../definition/index.js";
 
 const mockLogger = vi.mockObject(Logger.prototype);
 const context = new TransformerContext({ logger: mockLogger });
