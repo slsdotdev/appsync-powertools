@@ -1,5 +1,17 @@
 # gqlbase
 
+## 0.1.6
+
+### Patch Changes
+
+- 18da481: Update deps
+- Updated dependencies [c677464]
+- Updated dependencies [18da481]
+  - @gqlbase/plugins@0.1.6
+  - @gqlbase/shared@0.1.6
+  - @gqlbase/cli@0.1.6
+  - @gqlbase/core@0.1.6
+
 ## 0.1.5
 
 ### Patch Changes

@@ -1,5 +1,11 @@
 # @gqlbase/shared
 
+## 0.1.6
+
+### Patch Changes
+
+- 18da481: Update deps
+
 ## 0.1.5
 
 ## 0.1.4
