@@ -8,12 +8,14 @@
   "sideEffects": false,
   "scripts": {
     "codegen": "gqlbase",
-    "postcodegen": "drizzle-kit generate",
     "watch": "gqlbase --watch"
   },
   "dependencies": {
+    "@aws/aurora-dsql-node-postgres-connector": "^0.1.8",
     "@middy-appsync/graphql": "^0.1.1",
     "drizzle-orm": "^0.45.2",
+    "dsqlbase": "^0.1.4",
+    "pg": "^8.20.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {

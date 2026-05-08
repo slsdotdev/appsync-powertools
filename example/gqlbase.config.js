@@ -2,7 +2,7 @@ import { defineConfig } from "@gqlbase/cli/config";
 import { basePreset, relayPreset, appsyncPreset } from "@gqlbase/plugins";
 import { middyAppSyncGraphQLPlugin } from "@gqlbase/plugins/middy";
 import { zodSchemaGeneratorPlugin } from "@gqlbase/plugins/zod";
-import { drizzleSchemaGeneratorPlugin } from "@gqlbase/plugins/drizzle";
+import { dsqlbase } from "@gqlbase/plugins/dsql";
 
 export default defineConfig({
   source: "src/schema",
@@ -20,17 +20,6 @@ export default defineConfig({
       authorizationModes: ["cognito", "iam"],
     }),
     zodSchemaGeneratorPlugin(),
-    drizzleSchemaGeneratorPlugin({
-      scalarMap: {
-        Decimal: "varchar",
-        DateTime: {
-          type: "timestamp",
-          config: {
-            withTimezone: false,
-            mode: "string",
-          },
-        },
-      },
-    }),
+    dsqlbase(),
   ],
 });

@@ -21,8 +21,6 @@ type User implements Node & Timestamped & SoftDeletable & Versioned
 
   email: EmailAddress @semanticNonNull @constraint(max: 320)
   phone: PhoneNumber
-  passwordHash: String! @serverOnly
-
   firstName: String @semanticNonNull @constraint(min: 1, max: 100)
   lastName: String @semanticNonNull @constraint(min: 1, max: 100)
   displayName: String @constraint(max: 150)
@@ -33,7 +31,7 @@ type User implements Node & Timestamped & SoftDeletable & Versioned
   fullName: String @clientOnly
 
   avatarUrl: URL
-  roles: [Role] @semanticNonNull(levels: [0, 1]) @readOnly @scope(allow: [ADMIN])
+  # roles: [Role] @semanticNonNull(levels: [0, 1]) @readOnly @scope(allow: [ADMIN])
 
   emailVerifiedAt: DateTime @readOnly
   phoneVerifiedAt: DateTime @readOnly

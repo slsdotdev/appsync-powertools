@@ -52,6 +52,10 @@ export const isModel = (node: DefinitionNode): node is ObjectNode => {
   return isObjectNode(node) && node.hasDirective(ModelDirective.MODEL);
 };
 
+export const isPrimaryKeyField = (field: FieldNode): boolean => {
+  return field.name === "id";
+};
+
 export const shouldSkipFieldFromInput = (field: FieldNode): boolean => {
   return isReadOnly(field) || isServerOnly(field) || isClientOnly(field) || isRelationField(field);
 };

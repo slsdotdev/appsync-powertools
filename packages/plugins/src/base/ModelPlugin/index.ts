@@ -3,6 +3,7 @@ export {
   ModelDirective,
   ModelOperation,
   isModel,
+  isPrimaryKeyField,
   type OperationType,
   type ModelPluginOptions,
 } from "./ModelPlugin.utils.js";
