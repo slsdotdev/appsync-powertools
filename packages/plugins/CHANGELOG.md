@@ -1,5 +1,13 @@
 # @gqlbase/plugins
 
+## 0.1.7
+
+### Patch Changes
+
+- ff979f8: Added DsqlBaseSchemaGeneratorPlugin
+  - @gqlbase/core@0.1.7
+  - @gqlbase/shared@0.1.7
+
 ## 0.1.6
 
 ### Patch Changes
