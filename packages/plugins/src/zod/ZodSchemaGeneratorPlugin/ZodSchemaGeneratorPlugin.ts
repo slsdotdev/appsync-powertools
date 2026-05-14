@@ -2,6 +2,7 @@ import ts from "typescript";
 import { createPluginFactory, ITransformerContext, TransformerPluginBase } from "@gqlbase/core";
 import { isBuildInScalar } from "@gqlbase/shared/definition";
 import { createFileHeaders } from "@gqlbase/shared/codegen";
+import { pascalCase } from "@gqlbase/shared/format";
 import { getTypeHint, isInternal } from "@gqlbase/core/plugins";
 import {
   DefinitionNode,
@@ -30,9 +31,12 @@ import { isBaseScalar, type BaseScalarName } from "../../base/ScalarsPlugin/Scal
 import { hasConstraints, parseConstraints, isWriteOnly } from "../../base/UtilitiesPlugin/index.js";
 import { isSemanticNullable } from "../../base/RfcFeaturesPlugin/index.js";
 import { isRelationField } from "../../base/RelationsPlugin/index.js";
+import { isModel, isPrimaryKeyField } from "../../base/ModelPlugin/ModelPlugin.utils.js";
 import {
   CUSTOM_SCALAR_ZOD_MAP,
   mergeOptions,
+  shouldIncludeInZodCreate,
+  shouldIncludeInZodUpdate,
   ZodSchemaGeneratorPluginOptions,
 } from "./ZodSchemaGeneratorPlugin.utils.js";
 
@@ -47,7 +51,7 @@ import {
  *   USER
  * }
  *
- * type User {
+ * type User @model {
  *   id: ID!
  *   name: String! `@constraint(min: 3, max: 50)`
  *   email: String!
@@ -67,11 +71,27 @@ import {
  *   email: z.string(),
  *   role: UserRoleSchema,
  * });
+ *
+ * export const CreateUserInputSchema = z.object({
+ *   id: z.string().optional(),
+ *   name: z.string().min(3).max(50),
+ *   email: z.string(),
+ *   role: UserRoleSchema,
+ * });
+ *
+ * export const UpdateUserInputSchema = z.object({
+ *   id: z.string(),
+ *   name: z.string().min(3).max(50).optional(),
+ *   email: z.string().optional(),
+ *   role: UserRoleSchema.optional(),
+ * });
  * ```
  */
 
 export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
   private nodes: ts.Node[] = [];
+  private emitted = new Set<string>();
+  private argumentSeeds = new Set<string>();
   private options: Required<ZodSchemaGeneratorPluginOptions>;
 
   constructor(context: ITransformerContext, options: ZodSchemaGeneratorPluginOptions = {}) {
@@ -253,6 +273,7 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
         level + 1,
         suffix
       );
+
       let arrayExpr = this._zCall("array", [elementExpr]);
 
       if (isNullableTypeNode(field.type, level)) {
@@ -272,6 +293,81 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
     return expr;
   }
 
+  /**
+   * Create/update zod expression for a model field. Mirrors the output expression for
+   * inner list levels but rewrites top-level nullability per `mode`:
+   *  - create: id forced optional; other fields follow `isSemanticNullable`.
+   *  - update: id required; non-null fields → `.optional()` only (no `.nullable()`);
+   *    nullable fields → `.optional().nullable()`.
+   */
+  private _createModelFieldZodExpression(
+    field: FieldNode,
+    fieldType: TypeNode,
+    mode: "create" | "update",
+    level = 0
+  ): ts.Expression {
+    if (fieldType instanceof NonNullTypeNode) {
+      return this._createModelFieldZodExpression(field, fieldType.type, mode, level);
+    }
+
+    if (fieldType instanceof ListTypeNode) {
+      const elementExpr = this._createModelFieldZodExpression(
+        field,
+        fieldType.type,
+        mode,
+        level + 1
+      );
+      let arrayExpr = this._zCall("array", [elementExpr]);
+
+      if (level === 0) {
+        arrayExpr = this._applyModelTopLevelNullable(arrayExpr, field, mode);
+      } else if (isSemanticNullable(field, level)) {
+        arrayExpr = this._applyNullable(arrayExpr, level);
+      }
+
+      return arrayExpr;
+    }
+
+    let expr = this._createScalarZodExpression(fieldType.name);
+    expr = this._applyConstraints(expr, field);
+
+    if (level === 0) {
+      expr = this._applyModelTopLevelNullable(expr, field, mode);
+    } else if (isSemanticNullable(field, level)) {
+      expr = this._applyNullable(expr, level);
+    }
+
+    return expr;
+  }
+
+  private _applyModelTopLevelNullable(
+    expr: ts.Expression,
+    field: FieldNode,
+    mode: "create" | "update"
+  ): ts.Expression {
+    const isPrimaryKey = isPrimaryKeyField(field);
+    const isNullable = isSemanticNullable(field, 0);
+
+    if (mode === "create") {
+      if (isPrimaryKey) {
+        return this._chainCall(expr, "optional");
+      }
+
+      return isNullable ? this._applyNullable(expr, 0) : expr;
+    }
+
+    // update mode
+    if (isPrimaryKey) {
+      return expr;
+    }
+
+    if (isNullable) {
+      return this._applyNullable(expr, 0);
+    }
+
+    return this._chainCall(expr, "optional");
+  }
+
   private _createObjectFieldProperties(
     definition: ObjectNode | InterfaceNode
   ): ts.ObjectLiteralElementLike[] {
@@ -283,6 +379,35 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
       }
 
       const zodExpr = this._createOutputFieldZodExpression(field, field.type);
+
+      properties.push(
+        ts.factory.createPropertyAssignment(ts.factory.createIdentifier(field.name), zodExpr)
+      );
+    }
+
+    return properties;
+  }
+
+  private _isFieldReferencingModel(field: FieldNode): boolean {
+    const typeDef = this.context.document.getNode(field.type.getTypeName());
+
+    if (typeDef && isModel(typeDef)) return true;
+    return false;
+  }
+
+  private _createModelInputFieldProperties(
+    model: ObjectNode,
+    mode: "create" | "update"
+  ): ts.ObjectLiteralElementLike[] {
+    const properties: ts.ObjectLiteralElementLike[] = [];
+    const shouldInclude = mode === "create" ? shouldIncludeInZodCreate : shouldIncludeInZodUpdate;
+
+    for (const field of model.fields ?? []) {
+      if (isInternal(field) || this._isFieldReferencingModel(field) || !shouldInclude(field)) {
+        continue;
+      }
+
+      const zodExpr = this._createModelFieldZodExpression(field, field.type, mode);
 
       properties.push(
         ts.factory.createPropertyAssignment(ts.factory.createIdentifier(field.name), zodExpr)
@@ -314,26 +439,27 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
     return properties;
   }
 
-  private _createSchemaConstDeclaration(
-    name: string,
-    initializer: ts.Expression,
-    suffix = "Schema",
-    exported = true
-  ): ts.VariableStatement {
-    return ts.factory.createVariableStatement(
-      exported ? [ts.factory.createModifier(ts.SyntaxKind.ExportKeyword)] : undefined,
-      ts.factory.createVariableDeclarationList(
-        [
-          ts.factory.createVariableDeclaration(
-            ts.factory.createIdentifier(`${name}${suffix}`),
-            undefined,
-            undefined,
-            initializer
-          ),
-        ],
-        ts.NodeFlags.Const
+  private _pushSchemaConst(fullName: string, initializer: ts.Expression, exported = true): void {
+    if (this.emitted.has(fullName)) return;
+
+    this.nodes.push(
+      ts.factory.createVariableStatement(
+        exported ? [ts.factory.createModifier(ts.SyntaxKind.ExportKeyword)] : undefined,
+        ts.factory.createVariableDeclarationList(
+          [
+            ts.factory.createVariableDeclaration(
+              ts.factory.createIdentifier(fullName),
+              undefined,
+              undefined,
+              initializer
+            ),
+          ],
+          ts.NodeFlags.Const
+        )
       )
     );
+
+    this.emitted.add(fullName);
   }
 
   private _getSelfReferenceFields(definition: InputObjectNode): InputValueNode[] {
@@ -357,10 +483,9 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
     }
 
     const args = definition.values.map((v) => ts.factory.createStringLiteral(v.name));
-
     const initializer = this._zCall("enum", [ts.factory.createArrayLiteralExpression(args)]);
 
-    this.nodes.push(this._createSchemaConstDeclaration(definition.name, initializer));
+    this._pushSchemaConst(`${definition.name}Schema`, initializer);
   }
 
   private _generateObject(definition: ObjectNode | InterfaceNode) {
@@ -370,7 +495,22 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
       ts.factory.createObjectLiteralExpression(properties, true),
     ]);
 
-    this.nodes.push(this._createSchemaConstDeclaration(definition.name, initializer));
+    this._pushSchemaConst(`${definition.name}Schema`, initializer);
+
+    if (isObjectNode(definition) && isModel(definition)) {
+      this._generateModelMutationSchemas(definition);
+    }
+  }
+
+  private _generateModelMutationSchemas(model: ObjectNode) {
+    for (const mode of ["create", "update"] as const) {
+      const properties = this._createModelInputFieldProperties(model, mode);
+      const initializer = this._zCall("object", [
+        ts.factory.createObjectLiteralExpression(properties, true),
+      ]);
+
+      this._pushSchemaConst(pascalCase(mode, model.name, "input", "schema"), initializer);
+    }
   }
 
   private _generateInputObject(definition: InputObjectNode) {
@@ -402,10 +542,8 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
         ]
       );
 
-      this.nodes.push(
-        this._createSchemaConstDeclaration(definition.name, base, "Base", false),
-        this._createSchemaConstDeclaration(definition.name, initializer)
-      );
+      this._pushSchemaConst(`${definition.name}Base`, base, false);
+      this._pushSchemaConst(`${definition.name}Schema`, initializer);
 
       return;
     }
@@ -415,7 +553,7 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
       ts.factory.createObjectLiteralExpression(properties, true),
     ]);
 
-    this.nodes.push(this._createSchemaConstDeclaration(definition.name, initializer));
+    this._pushSchemaConst(`${definition.name}Schema`, initializer);
   }
 
   private _generateUnion(definition: UnionNode) {
@@ -432,12 +570,64 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
 
     const initializer = this._zCall("union", [ts.factory.createArrayLiteralExpression(memberRefs)]);
 
-    this.nodes.push(this._createSchemaConstDeclaration(definition.name, initializer));
+    this._pushSchemaConst(`${definition.name}Schema`, initializer);
+  }
+
+  /**
+   * Records every argument type used by this object's fields. Resolved into actual
+   * schemas in `after()`, after all model-derived schemas have been emitted so they
+   * are not duplicated.
+   */
+  private _seedArgumentInputs(definition: ObjectNode | InterfaceNode): void {
+    for (const field of definition.fields ?? []) {
+      for (const arg of field.arguments ?? []) {
+        const maybeInput = this.context.document.getNode(arg.type.getTypeName());
+
+        if (maybeInput && isInputObjectNode(maybeInput)) {
+          this.argumentSeeds.add(arg.type.getTypeName());
+        }
+      }
+    }
+  }
+
+  /**
+   * Depth-first emit an argument input and its dependencies. Direct self-references
+   * (e.g. `and: [PostFilterInput]`) are handled by `_generateInputObject`'s base/extend
+   * split; the `visiting` set guards against indirect cycles. Non-input nodes
+   * encountered as dependencies are ignored — enums, objects, unions, and interfaces
+   * are already emitted via the default `generate()` path.
+   */
+  private _emitArgumentInput(typeName: string, visiting: Set<string>): void {
+    const schemaName = `${typeName}Schema`;
+
+    if (this.emitted.has(schemaName)) return;
+    if (visiting.has(typeName)) return;
+    if (isBuildInScalar(typeName)) return;
+
+    const node = this.context.document.getNode(typeName);
+    if (!node || !isInputObjectNode(node)) return;
+
+    visiting.add(typeName);
+
+    for (const field of node.fields ?? []) {
+      const depName = field.type.getTypeName();
+      if (depName !== typeName) {
+        this._emitArgumentInput(depName, visiting);
+      }
+    }
+
+    visiting.delete(typeName);
+
+    this._generateInputObject(node);
   }
 
   public before() {
+    this.nodes = [];
+    this.emitted = new Set();
+    this.argumentSeeds = new Set();
+
     const headers = createFileHeaders();
-    this.nodes = [...headers];
+    this.nodes.push(...headers);
 
     // import * as z from "zod/v4";
     this.nodes.push(
@@ -457,32 +647,46 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
 
   public match(definition: DefinitionNode): boolean {
     return (
-      !isOperationNode(definition) &&
       !isInternal(definition) &&
       !isScalarNode(definition) &&
-      !isDirectiveDefinitionNode(definition)
+      !isDirectiveDefinitionNode(definition) &&
+      !isInputObjectNode(definition)
     );
   }
 
   public generate(definition: DefinitionNode) {
+    if (isOperationNode(definition)) {
+      if (this.options.generateArgumentSchemas) {
+        this._seedArgumentInputs(definition as ObjectNode);
+      }
+
+      return;
+    }
+
     if (isEnumNode(definition)) {
       return this._generateEnum(definition);
     }
 
-    if (isObjectNode(definition)) {
-      return this._generateObject(definition);
-    }
+    if (isObjectNode(definition) || isInterfaceNode(definition)) {
+      if (this.options.generateArgumentSchemas) {
+        this._seedArgumentInputs(definition);
+      }
 
-    if (isInterfaceNode(definition)) {
       return this._generateObject(definition);
-    }
-
-    if (isInputObjectNode(definition)) {
-      return this._generateInputObject(definition);
     }
 
     if (isUnionNode(definition)) {
       return this._generateUnion(definition);
+    }
+  }
+
+  public after(): void {
+    if (!this.options.generateArgumentSchemas) return;
+
+    const visiting = new Set<string>();
+
+    for (const typeName of this.argumentSeeds) {
+      this._emitArgumentInput(typeName, visiting);
     }
   }
 

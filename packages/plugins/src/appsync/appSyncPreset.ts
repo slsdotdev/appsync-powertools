@@ -3,10 +3,37 @@ import {
   appSyncSchemaGeneratorPlugin,
   AppSyncSchemaGeneratorPluginOptions,
 } from "./AppSyncSchemaGeneratorPlugin/index.js";
+import {
+  middyAppSyncGraphQLPlugin,
+  MiddyAppSyncGraphQLPluginOptions,
+} from "./MiddyAppSyncGraphQLPlugin/index.js";
+
+interface MiddyAppSyncOptions extends MiddyAppSyncGraphQLPluginOptions {
+  /**
+   * If true, the MiddyAppSyncGraphQLPlugin will be included in the preset. If false, it will be excluded.
+   *
+   * @default true
+   */
+  enable?: boolean;
+}
 
 interface AppSyncPresetOptions {
+  /**
+   * If true, the AppSyncSchemaGeneratorPlugin will emit the generated document SDL as string in the output object.
+   *
+   * @default false
+   */
   emitOutput?: boolean;
+  /**
+   * Optional mapping of custom scalar names to AppSync scalar names or built-in scalar types.
+   * This allows you to specify how custom scalars should be represented in the generated AppSync schema.
+   */
   scalarMappings?: AppSyncSchemaGeneratorPluginOptions["scalarMappings"];
+
+  /**
+   * Options for the MiddyAppSyncGraphQLPlugin
+   */
+  middyAppSync?: MiddyAppSyncOptions;
 }
 
 /**
@@ -20,11 +47,19 @@ interface AppSyncPresetOptions {
  */
 
 export function appsyncPreset(options: AppSyncPresetOptions = {}) {
-  return [
+  const { middyAppSync = { enable: true }, ...schemaGeneratorOptions } = options;
+
+  const base = [
     appSyncUtilsPlugin(),
     appSyncSchemaGeneratorPlugin({
-      emitOutput: options.emitOutput ?? false,
-      scalarMappings: options.scalarMappings,
+      emitOutput: schemaGeneratorOptions.emitOutput ?? false,
+      scalarMappings: schemaGeneratorOptions.scalarMappings,
     }),
   ];
+
+  if (middyAppSync.enable !== false) {
+    base.push(middyAppSyncGraphQLPlugin(middyAppSync));
+  }
+
+  return base;
 }

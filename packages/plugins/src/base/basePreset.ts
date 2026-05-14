@@ -1,7 +1,7 @@
 import { utilsPlugin } from "./UtilitiesPlugin/index.js";
 import { interfaceUtilsPlugin } from "./InterfaceUtilsPlugin/index.js";
 import { scalarsPlugin } from "./ScalarsPlugin/index.js";
-import { modelPlugin } from "./ModelPlugin/index.js";
+import { modelPlugin, OperationType } from "./ModelPlugin/index.js";
 import { relationPlugin } from "./RelationsPlugin/index.js";
 import { rfcFeaturesPlugin } from "./RfcFeaturesPlugin/index.js";
 import { schemaGeneratorPlugin } from "./SchemaGeneratorPlugin.js";
@@ -23,15 +23,25 @@ import { modelTypesGeneratorPlugin } from "./ModelTypesGeneratorPlugin/index.js"
  * @returns An array of plugin factories for the base plugins.
  */
 
-export function basePreset() {
+export function basePreset(
+  config: BasePresetConfig = {
+    operations: ["read", "write"],
+  }
+) {
+  const { operations } = config;
+
   return [
     utilsPlugin(),
     interfaceUtilsPlugin(),
     scalarsPlugin(),
     rfcFeaturesPlugin(),
-    modelPlugin(),
+    modelPlugin({ operations }),
     relationPlugin(),
     schemaGeneratorPlugin(),
     modelTypesGeneratorPlugin(),
   ];
+}
+
+export interface BasePresetConfig {
+  operations: OperationType[];
 }

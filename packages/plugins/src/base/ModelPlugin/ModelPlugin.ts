@@ -759,19 +759,27 @@ export class ModelPlugin implements ITransformerPlugin {
   }
 
   public execute(definition: ObjectNode) {
-    this._createFilterInput(definition);
-    this._createMutationInput(
-      definition,
-      "create",
-      pascalCase("create", definition.name, "input"),
-      false
-    );
-    this._createMutationInput(
-      definition,
-      "update",
-      pascalCase("update", definition.name, "input"),
-      true
-    );
+    const operations = this._getOperationNames(definition);
+
+    for (const verb of operations) {
+      switch (verb) {
+        case "list":
+          this._createFilterInput(definition);
+          continue;
+        case "create":
+        case "upsert":
+        case "update":
+          this._createMutationInput(
+            definition,
+            verb,
+            pascalCase(verb, definition.name, "input"),
+            verb !== "create"
+          );
+          continue;
+        default:
+          continue;
+      }
+    }
 
     for (const field of definition.fields ?? []) {
       if (isManyRelationship(field) && !field.hasArgument("filter")) {

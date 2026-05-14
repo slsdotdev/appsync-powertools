@@ -335,7 +335,7 @@ export class MiddyAppSyncGraphQLPlugin extends TypesGeneratorBase {
 
     this.context.files.push({
       type: "ts",
-      path: "middy/middy-appsync.typegen.ts",
+      path: "appsync/middy-appsync.typegen.ts",
       filename: "middy-appsync.typegen.ts",
       content,
     });

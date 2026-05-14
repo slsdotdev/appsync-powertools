@@ -1,6 +1,5 @@
 import { defineConfig } from "@gqlbase/cli/config";
 import { basePreset, relayPreset, appsyncPreset } from "@gqlbase/plugins";
-import { middyAppSyncGraphQLPlugin } from "@gqlbase/plugins/middy";
 import { zodSchemaGeneratorPlugin } from "@gqlbase/plugins/zod";
 import { dsqlbase } from "@gqlbase/plugins/dsql";
 
@@ -15,9 +14,9 @@ export default defineConfig({
       scalarMappings: {
         Decimal: "String",
       },
-    }),
-    middyAppSyncGraphQLPlugin({
-      authorizationModes: ["cognito", "iam"],
+      middyAppSync: {
+        authorizationModes: ["cognito", "iam"],
+      },
     }),
     zodSchemaGeneratorPlugin(),
     dsqlbase(),
