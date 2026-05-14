@@ -1,5 +1,13 @@
 # @gqlbase/plugins
 
+## 0.1.8
+
+### Patch Changes
+
+- 25c27f1: codegen fixes
+  - @gqlbase/core@0.1.8
+  - @gqlbase/shared@0.1.8
+
 ## 0.1.7
 
 ### Patch Changes
