@@ -3,6 +3,7 @@ import { createPluginFactory, ITransformerContext } from "@gqlbase/core";
 import {
   DefinitionNode,
   FieldNode,
+  isInterfaceNode,
   isNullableTypeNode,
   isObjectNode,
   isOperationNode,
@@ -11,7 +12,7 @@ import {
 } from "@gqlbase/core/definition";
 import { isInternal } from "@gqlbase/core/plugins";
 import { createFileHeaders } from "@gqlbase/shared/codegen";
-import { isModel, isRelationField, TypesGeneratorBase } from "../../base/index.js";
+import { isRelationField, TypesGeneratorBase } from "../../base/index.js";
 import {
   getAuthModeIdentityType,
   type MiddyAppSyncGraphQLPluginOptions,
@@ -302,11 +303,7 @@ export class MiddyAppSyncGraphQLPlugin extends TypesGeneratorBase {
   }
 
   public match(node: DefinitionNode): boolean {
-    if (this.options.relationsOnly) {
-      return (isOperationNode(node) || isModel(node)) && !isInternal(node);
-    }
-
-    return isObjectNode(node) && !isInternal(node);
+    return (isObjectNode(node) || isInterfaceNode(node)) && !isInternal(node);
   }
 
   public generate(node: ObjectNode) {

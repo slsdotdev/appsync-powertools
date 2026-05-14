@@ -27,12 +27,7 @@ import {
 } from "@gqlbase/core/definition";
 import { TransformerPluginExecutionError } from "@gqlbase/shared/errors";
 import { isBaseScalar, type BaseScalarName } from "../../base/ScalarsPlugin/ScalarsPlugin.utils.js";
-import {
-  hasConstraints,
-  parseConstraints,
-  isServerOnly,
-  isWriteOnly,
-} from "../../base/UtilitiesPlugin/index.js";
+import { hasConstraints, parseConstraints, isWriteOnly } from "../../base/UtilitiesPlugin/index.js";
 import { isSemanticNullable } from "../../base/RfcFeaturesPlugin/index.js";
 import { isRelationField } from "../../base/RelationsPlugin/index.js";
 import {
@@ -283,12 +278,7 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
     const properties: ts.ObjectLiteralElementLike[] = [];
 
     for (const field of definition.fields ?? []) {
-      if (
-        isInternal(field) ||
-        isWriteOnly(field) ||
-        isServerOnly(field) ||
-        isRelationField(field)
-      ) {
+      if (isInternal(field) || isWriteOnly(field) || isRelationField(field)) {
         continue;
       }
 

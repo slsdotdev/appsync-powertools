@@ -161,7 +161,6 @@ export class RelationsPlugin implements ITransformerPlugin {
     }
 
     const target = this._getRelationshipTarget(object, field);
-
     return parseFieldRelation(object, field, target);
   }
 

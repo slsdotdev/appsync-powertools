@@ -22,7 +22,7 @@ import { isRelationField } from "../RelationsPlugin/RelationsPlugin.utils.js";
 import { isInternal } from "@gqlbase/core/plugins";
 import { isSemanticNullable } from "../RfcFeaturesPlugin/RfcFeaturesPlugin.utils.js";
 import { TypesGeneratorBase } from "../TypesGeneratorBase/TypesGeneratorBase.js";
-import { isServerOnly, isWriteOnly } from "../UtilitiesPlugin/UtilitiesPlugin.utils.js";
+import { isWriteOnly } from "../UtilitiesPlugin/UtilitiesPlugin.utils.js";
 
 /**
  * This plugin generates TypeScript types for all objects defined in the schema.
@@ -59,12 +59,7 @@ export class ModelTypesGeneratorPlugin extends TypesGeneratorBase {
     const members: ts.TypeElement[] = [];
 
     for (const field of definition.fields ?? []) {
-      if (
-        isInternal(field) ||
-        isWriteOnly(field) ||
-        isServerOnly(field) ||
-        isRelationField(field)
-      ) {
+      if (isInternal(field) || isWriteOnly(field) || isRelationField(field)) {
         continue;
       }
 
@@ -75,7 +70,7 @@ export class ModelTypesGeneratorPlugin extends TypesGeneratorBase {
       const typeNode = this._createValueTypeReference(field, field.type);
 
       const propertySignature = ts.factory.createPropertySignature(
-        [ts.factory.createModifier(ts.SyntaxKind.ReadonlyKeyword)],
+        undefined,
         ts.factory.createIdentifier(field.name),
         questionToken,
         typeNode

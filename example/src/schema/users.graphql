@@ -13,8 +13,8 @@ Platform user account. A single person may hold multiple roles simultaneously
 (e.g. a vendor owner who is also a customer). Role resolution is contextual
 and driven by the access token's active scope.
 """
-type User implements Node & Timestamped & SoftDeletable & Versioned
-  @model
+type User implements Timestamped & SoftDeletable & Versioned
+  @model(operations: [UPDATE])
   @scope(allow: [ADMIN, VENDOR, SHOP]) {
   id: UUID!
   version: Int @readOnly @semanticNonNull
@@ -105,7 +105,7 @@ enum AddressLabel {
 Per-user settings and preference flags. One-to-one with User.
 Split from User to keep the core record lean.
 """
-type UserPreferences implements Node @model(operations: [write]) @scope(allow: [ADMIN, SHOP]) {
+type UserPreferences implements Node @model(operations: [UPDATE]) @scope(allow: [ADMIN, SHOP]) {
   id: UUID!
 
   emailNotifications: Boolean @semanticNonNull

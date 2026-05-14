@@ -3,7 +3,7 @@ import { BaseScalar, type BaseScalarName } from "../../base/ScalarsPlugin/Scalar
 export interface ZodSchemaGeneratorPluginOptions {
   /**
    * The output file name for the generated schemas.
-   * @default "validators.typegen.ts"
+   * @default "schema.validators.ts"
    */
   fileName?: string;
 
@@ -15,7 +15,7 @@ export interface ZodSchemaGeneratorPluginOptions {
 }
 
 export const DEFAULT_OPTIONS: Required<ZodSchemaGeneratorPluginOptions> = {
-  fileName: "validators.typegen.ts",
+  fileName: "schema.validators.ts",
   emitOutput: false,
 } as const;
 
