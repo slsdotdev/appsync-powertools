@@ -45,7 +45,7 @@ describe("ModelTypesGeneratorPlugin", () => {
         `
       );
 
-      expect(output).toContain("readonly bio?: Maybe<string>");
+      expect(output).toContain("bio?: Maybe<string>");
     });
 
     it("generates non-null type for schema NonNull fields", () => {
@@ -62,7 +62,7 @@ describe("ModelTypesGeneratorPlugin", () => {
         `
       );
 
-      expect(output).toContain("readonly id: string");
+      expect(output).toContain("id: string");
       expect(output).not.toMatch(/id\?/);
     });
 
@@ -80,7 +80,7 @@ describe("ModelTypesGeneratorPlugin", () => {
         `
       );
 
-      expect(output).toContain("readonly tags?: Maybe<Maybe<string>[]>");
+      expect(output).toContain("tags?: Maybe<Maybe<string>[]>");
     });
 
     it("generates non-null list with non-null items: [String!]!", () => {
@@ -97,7 +97,7 @@ describe("ModelTypesGeneratorPlugin", () => {
         `
       );
 
-      expect(output).toContain("readonly tags: string[]");
+      expect(output).toContain("tags: string[]");
       expect(output).not.toMatch(/tags\?/);
     });
 
@@ -115,7 +115,7 @@ describe("ModelTypesGeneratorPlugin", () => {
         `
       );
 
-      expect(output).toContain("readonly tags: Maybe<string>[]");
+      expect(output).toContain("tags: Maybe<string>[]");
       expect(output).not.toMatch(/tags\?/);
     });
 
@@ -133,7 +133,7 @@ describe("ModelTypesGeneratorPlugin", () => {
         `
       );
 
-      expect(output).toContain("readonly tags?: Maybe<string[]>");
+      expect(output).toContain("tags?: Maybe<string[]>");
     });
   });
 
@@ -161,7 +161,7 @@ describe("ModelTypesGeneratorPlugin", () => {
         `
       );
 
-      expect(output).toContain("readonly name: string");
+      expect(output).toContain("name: string");
       expect(output).not.toMatch(/name\?/);
     });
 
@@ -180,7 +180,7 @@ describe("ModelTypesGeneratorPlugin", () => {
       );
 
       // level 0 non-null (directive), level 1 nullable (not specified)
-      expect(output).toContain("readonly tags: Maybe<string>[]");
+      expect(output).toContain("tags: Maybe<string>[]");
       expect(output).not.toMatch(/tags\?/);
     });
 
@@ -198,7 +198,7 @@ describe("ModelTypesGeneratorPlugin", () => {
         `
       );
 
-      expect(output).toContain("readonly tags: string[]");
+      expect(output).toContain("tags: string[]");
       expect(output).not.toMatch(/tags\?/);
       expect(output).not.toContain("Maybe<string>[]");
     });
@@ -218,7 +218,7 @@ describe("ModelTypesGeneratorPlugin", () => {
       );
 
       // level 0 nullable, level 1 non-null
-      expect(output).toContain("readonly tags?: Maybe<string[]>");
+      expect(output).toContain("tags?: Maybe<string[]>");
     });
 
     it("combines schema NonNull with @semanticNonNull on lists", () => {
@@ -236,7 +236,7 @@ describe("ModelTypesGeneratorPlugin", () => {
       );
 
       // level 0 covered by @semanticNonNull, level 1 covered by String!
-      expect(output).toContain("readonly tags: string[]");
+      expect(output).toContain("tags: string[]");
       expect(output).not.toMatch(/tags\?/);
     });
   });
