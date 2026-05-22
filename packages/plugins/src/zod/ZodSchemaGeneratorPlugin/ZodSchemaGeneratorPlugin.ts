@@ -1,7 +1,6 @@
 import ts from "typescript";
 import { createPluginFactory, ITransformerContext, TransformerPluginBase } from "@gqlbase/core";
 import { isBuildInScalar } from "@gqlbase/shared/definition";
-import { createFileHeaders } from "@gqlbase/shared/codegen";
 import { pascalCase } from "@gqlbase/shared/format";
 import { getTypeHint, isInternal } from "@gqlbase/core/plugins";
 import {
@@ -27,6 +26,7 @@ import {
   UnionNode,
 } from "@gqlbase/core/definition";
 import { TransformerPluginExecutionError } from "@gqlbase/shared/errors";
+import { stronglyConnectedComponents } from "@gqlbase/shared/utils";
 import { isBaseScalar, type BaseScalarName } from "../../base/ScalarsPlugin/ScalarsPlugin.utils.js";
 import { hasConstraints, parseConstraints, isWriteOnly } from "../../base/UtilitiesPlugin/index.js";
 import { isSemanticNullable } from "../../base/RfcFeaturesPlugin/index.js";
@@ -88,10 +88,18 @@ import {
  * ```
  */
 
+interface PendingSchema {
+  name: string;
+  exported: boolean;
+  expr: ts.Expression;
+  deps: Set<string>;
+}
+
 export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
   private nodes: ts.Node[] = [];
-  private emitted = new Set<string>();
-  private argumentSeeds = new Set<string>();
+  private pending: PendingSchema[] = [];
+  private pendingByName = new Map<string, PendingSchema>();
+  private currentRef: (name: string) => ts.Expression = (name) => ts.factory.createIdentifier(name);
   private options: Required<ZodSchemaGeneratorPluginOptions>;
 
   constructor(context: ITransformerContext, options: ZodSchemaGeneratorPluginOptions = {}) {
@@ -191,7 +199,7 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
       }
     }
 
-    return ts.factory.createIdentifier(`${typeName}${suffix}`);
+    return this.currentRef(`${typeName}${suffix}`);
   }
 
   private _applyConstraints(expr: ts.Expression, field: FieldNode | InputValueNode): ts.Expression {
@@ -439,27 +447,87 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
     return properties;
   }
 
-  private _pushSchemaConst(fullName: string, initializer: ts.Expression, exported = true): void {
-    if (this.emitted.has(fullName)) return;
+  /**
+   * Builds the schema's ts.Expression eagerly during `generate()` so that the
+   * GraphQL definition state (relation directives, constraints, semantic-nullability)
+   * is captured before the `cleanup` phase mutates the document. Deps are recorded
+   * via a transient `currentRef` that pushes every referenced schema name into a
+   * local set.
+   */
+  private _registerSchema(fullName: string, build: () => ts.Expression, exported = true): void {
+    if (this.pendingByName.has(fullName)) return;
 
-    this.nodes.push(
-      ts.factory.createVariableStatement(
-        exported ? [ts.factory.createModifier(ts.SyntaxKind.ExportKeyword)] : undefined,
-        ts.factory.createVariableDeclarationList(
-          [
-            ts.factory.createVariableDeclaration(
-              ts.factory.createIdentifier(fullName),
-              undefined,
-              undefined,
-              initializer
-            ),
-          ],
-          ts.NodeFlags.Const
-        )
+    const deps = new Set<string>();
+    const prevRef = this.currentRef;
+
+    this.currentRef = (name) => {
+      deps.add(name);
+      return ts.factory.createIdentifier(name);
+    };
+
+    const expr = build();
+
+    this.currentRef = prevRef;
+
+    const entry: PendingSchema = { name: fullName, exported, expr, deps };
+    this.pending.push(entry);
+    this.pendingByName.set(fullName, entry);
+  }
+
+  /**
+   * Wraps every Identifier whose name is in `members` with `z.lazy(() => Identifier)`.
+   * Used to break true cycles after Tarjan SCC detection. Property keys are
+   * created via `ts.factory.createPropertyAssignment(Identifier(fieldName), …)` —
+   * field names are camelCase and never end in `Schema`/`Base`, so they cannot
+   * collide with member names; only value references get wrapped.
+   */
+  private _wrapCyclicRefs(expr: ts.Expression, members: Set<string>): ts.Expression {
+    const result = ts.transform(expr, [
+      (context) => {
+        const visit: ts.Visitor = (node) => {
+          if (ts.isIdentifier(node) && members.has(node.text)) {
+            return this._lazyRef(node.text);
+          }
+          return ts.visitEachChild(node, visit, context);
+        };
+        return (root) => ts.visitNode(root, visit) as ts.Expression;
+      },
+    ]);
+    return result.transformed[0] as ts.Expression;
+  }
+
+  private _toVariableStatement(
+    fullName: string,
+    initializer: ts.Expression,
+    exported: boolean
+  ): ts.VariableStatement {
+    return ts.factory.createVariableStatement(
+      exported ? [ts.factory.createModifier(ts.SyntaxKind.ExportKeyword)] : undefined,
+      ts.factory.createVariableDeclarationList(
+        [
+          ts.factory.createVariableDeclaration(
+            ts.factory.createIdentifier(fullName),
+            undefined,
+            undefined,
+            initializer
+          ),
+        ],
+        ts.NodeFlags.Const
       )
     );
+  }
 
-    this.emitted.add(fullName);
+  private _lazyRef(name: string): ts.Expression {
+    return this._zCall("lazy", [
+      ts.factory.createArrowFunction(
+        undefined,
+        undefined,
+        [],
+        undefined,
+        ts.factory.createToken(ts.SyntaxKind.EqualsGreaterThanToken),
+        ts.factory.createIdentifier(name)
+      ),
+    ]);
   }
 
   private _getSelfReferenceFields(definition: InputObjectNode): InputValueNode[] {
@@ -482,20 +550,17 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
       );
     }
 
-    const args = definition.values.map((v) => ts.factory.createStringLiteral(v.name));
-    const initializer = this._zCall("enum", [ts.factory.createArrayLiteralExpression(args)]);
-
-    this._pushSchemaConst(`${definition.name}Schema`, initializer);
+    this._registerSchema(`${definition.name}Schema`, () => {
+      const args = (definition.values ?? []).map((v) => ts.factory.createStringLiteral(v.name));
+      return this._zCall("enum", [ts.factory.createArrayLiteralExpression(args)]);
+    });
   }
 
   private _generateObject(definition: ObjectNode | InterfaceNode) {
-    const properties = this._createObjectFieldProperties(definition);
-
-    const initializer = this._zCall("object", [
-      ts.factory.createObjectLiteralExpression(properties, true),
-    ]);
-
-    this._pushSchemaConst(`${definition.name}Schema`, initializer);
+    this._registerSchema(`${definition.name}Schema`, () => {
+      const properties = this._createObjectFieldProperties(definition);
+      return this._zCall("object", [ts.factory.createObjectLiteralExpression(properties, true)]);
+    });
 
     if (isObjectNode(definition) && isModel(definition)) {
       this._generateModelMutationSchemas(definition);
@@ -504,12 +569,10 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
 
   private _generateModelMutationSchemas(model: ObjectNode) {
     for (const mode of ["create", "update"] as const) {
-      const properties = this._createModelInputFieldProperties(model, mode);
-      const initializer = this._zCall("object", [
-        ts.factory.createObjectLiteralExpression(properties, true),
-      ]);
-
-      this._pushSchemaConst(pascalCase(mode, model.name, "input", "schema"), initializer);
+      this._registerSchema(pascalCase(mode, model.name, "input", "schema"), () => {
+        const properties = this._createModelInputFieldProperties(model, mode);
+        return this._zCall("object", [ts.factory.createObjectLiteralExpression(properties, true)]);
+      });
     }
   }
 
@@ -517,43 +580,44 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
     const selfRefs = this._getSelfReferenceFields(definition);
 
     if (selfRefs.length > 0) {
-      const properties = this._createInputFieldProperties(
-        definition,
-        selfRefs.map((f) => f.name)
+      this._registerSchema(
+        `${definition.name}Base`,
+        () => {
+          const properties = this._createInputFieldProperties(
+            definition,
+            selfRefs.map((f) => f.name)
+          );
+          return this._zCall("object", [
+            ts.factory.createObjectLiteralExpression(properties, true),
+          ]);
+        },
+        false
       );
 
-      const base = this._zCall("object", [
-        ts.factory.createObjectLiteralExpression(properties, true),
-      ]);
-
-      const extension = InputObjectNode.create(definition.name, undefined, undefined, selfRefs);
-
-      const initializer = ts.factory.createCallExpression(
-        ts.factory.createPropertyAccessExpression(
-          ts.factory.createIdentifier(`${definition.name}Base`),
-          ts.factory.createIdentifier("extend")
-        ),
-        undefined,
-        [
-          ts.factory.createObjectLiteralExpression(
-            this._createInputFieldProperties(extension, undefined, "Base"),
-            true
+      this._registerSchema(`${definition.name}Schema`, () => {
+        const extension = InputObjectNode.create(definition.name, undefined, undefined, selfRefs);
+        return ts.factory.createCallExpression(
+          ts.factory.createPropertyAccessExpression(
+            this.currentRef(`${definition.name}Base`),
+            ts.factory.createIdentifier("extend")
           ),
-        ]
-      );
-
-      this._pushSchemaConst(`${definition.name}Base`, base, false);
-      this._pushSchemaConst(`${definition.name}Schema`, initializer);
+          undefined,
+          [
+            ts.factory.createObjectLiteralExpression(
+              this._createInputFieldProperties(extension, undefined, "Base"),
+              true
+            ),
+          ]
+        );
+      });
 
       return;
     }
 
-    const properties = this._createInputFieldProperties(definition);
-    const initializer = this._zCall("object", [
-      ts.factory.createObjectLiteralExpression(properties, true),
-    ]);
-
-    this._pushSchemaConst(`${definition.name}Schema`, initializer);
+    this._registerSchema(`${definition.name}Schema`, () => {
+      const properties = this._createInputFieldProperties(definition);
+      return this._zCall("object", [ts.factory.createObjectLiteralExpression(properties, true)]);
+    });
   }
 
   private _generateUnion(definition: UnionNode) {
@@ -564,70 +628,62 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
       );
     }
 
-    const memberRefs = definition.types.map((type) =>
-      ts.factory.createIdentifier(`${type.name}Schema`)
-    );
-
-    const initializer = this._zCall("union", [ts.factory.createArrayLiteralExpression(memberRefs)]);
-
-    this._pushSchemaConst(`${definition.name}Schema`, initializer);
+    this._registerSchema(`${definition.name}Schema`, () => {
+      const memberRefs = (definition.types ?? []).map((type) =>
+        this.currentRef(`${type.name}Schema`)
+      );
+      return this._zCall("union", [ts.factory.createArrayLiteralExpression(memberRefs)]);
+    });
   }
 
   /**
-   * Records every argument type used by this object's fields. Resolved into actual
-   * schemas in `after()`, after all model-derived schemas have been emitted so they
-   * are not duplicated.
+   * Walks every argument type used by this object's fields and registers
+   * `PendingSchema` entries for the argument inputs and their transitive
+   * input-object dependencies. Runs during `generate()` so schemas are captured
+   * before `cleanup` mutates the document. Existing registrations (model-derived
+   * create/update, plain object schemas, etc.) are not overwritten.
    */
-  private _seedArgumentInputs(definition: ObjectNode | InterfaceNode): void {
+  private _registerArgumentInputs(definition: ObjectNode | InterfaceNode): void {
+    const visited = new Set<string>();
+
     for (const field of definition.fields ?? []) {
       for (const arg of field.arguments ?? []) {
-        const maybeInput = this.context.document.getNode(arg.type.getTypeName());
-
-        if (maybeInput && isInputObjectNode(maybeInput)) {
-          this.argumentSeeds.add(arg.type.getTypeName());
-        }
+        this._emitArgumentInput(arg.type.getTypeName(), visited);
       }
     }
   }
 
   /**
-   * Depth-first emit an argument input and its dependencies. Direct self-references
-   * (e.g. `and: [PostFilterInput]`) are handled by `_generateInputObject`'s base/extend
-   * split; the `visiting` set guards against indirect cycles. Non-input nodes
-   * encountered as dependencies are ignored — enums, objects, unions, and interfaces
-   * are already emitted via the default `generate()` path.
+   * Depth-first walker that registers `PendingSchema` entries for an argument input
+   * type and its transitive input-object dependencies. Ordering is handled later by
+   * topological sort in `after()`; this method only needs to (a) avoid infinite
+   * recursion via `visited`, and (b) skip non-input definitions (enums/objects/unions
+   * are registered via the default `generate()` path).
    */
-  private _emitArgumentInput(typeName: string, visiting: Set<string>): void {
-    const schemaName = `${typeName}Schema`;
-
-    if (this.emitted.has(schemaName)) return;
-    if (visiting.has(typeName)) return;
+  private _emitArgumentInput(typeName: string, visited: Set<string>): void {
+    if (visited.has(typeName)) return;
     if (isBuildInScalar(typeName)) return;
 
     const node = this.context.document.getNode(typeName);
     if (!node || !isInputObjectNode(node)) return;
 
-    visiting.add(typeName);
+    visited.add(typeName);
 
     for (const field of node.fields ?? []) {
       const depName = field.type.getTypeName();
       if (depName !== typeName) {
-        this._emitArgumentInput(depName, visiting);
+        this._emitArgumentInput(depName, visited);
       }
     }
-
-    visiting.delete(typeName);
 
     this._generateInputObject(node);
   }
 
   public before() {
     this.nodes = [];
-    this.emitted = new Set();
-    this.argumentSeeds = new Set();
-
-    const headers = createFileHeaders();
-    this.nodes.push(...headers);
+    this.pending = [];
+    this.pendingByName = new Map();
+    this.currentRef = (name) => ts.factory.createIdentifier(name);
 
     // import * as z from "zod/v4";
     this.nodes.push(
@@ -657,7 +713,7 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
   public generate(definition: DefinitionNode) {
     if (isOperationNode(definition)) {
       if (this.options.generateArgumentSchemas) {
-        this._seedArgumentInputs(definition as ObjectNode);
+        this._registerArgumentInputs(definition as ObjectNode);
       }
 
       return;
@@ -669,7 +725,7 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
 
     if (isObjectNode(definition) || isInterfaceNode(definition)) {
       if (this.options.generateArgumentSchemas) {
-        this._seedArgumentInputs(definition);
+        this._registerArgumentInputs(definition);
       }
 
       return this._generateObject(definition);
@@ -680,13 +736,33 @@ export class ZodSchemaGeneratorPlugin extends TransformerPluginBase {
     }
   }
 
+  /**
+   * All schema expressions are already built and deps collected (eagerly during
+   * `generate()`). Here we only need to compute SCCs and emit each `const` in
+   * dependency order, wrapping intra-SCC references with `z.lazy(…)` when an
+   * actual cycle exists.
+   */
   public after(): void {
-    if (!this.options.generateArgumentSchemas) return;
+    // SCCs come back in reverse topological order — sinks first — which is
+    // exactly the order we want for `const` emission.
+    const sccs = stronglyConnectedComponents(
+      this.pendingByName.keys(),
+      (name) => this.pendingByName.get(name)?.deps ?? []
+    );
 
-    const visiting = new Set<string>();
+    for (const scc of sccs) {
+      const members = new Set(scc);
+      const firstEntry = this.pendingByName.get(scc[0]);
+      const hasSelfLoop = scc.length === 1 && !!firstEntry && firstEntry.deps.has(scc[0]);
+      const isCycle = scc.length > 1 || hasSelfLoop;
 
-    for (const typeName of this.argumentSeeds) {
-      this._emitArgumentInput(typeName, visiting);
+      for (const name of scc) {
+        const entry = this.pendingByName.get(name);
+        if (!entry) continue;
+
+        const initializer = isCycle ? this._wrapCyclicRefs(entry.expr, members) : entry.expr;
+        this.nodes.push(this._toVariableStatement(name, initializer, entry.exported));
+      }
     }
   }
 

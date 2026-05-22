@@ -1129,6 +1129,122 @@ describe("ZodSchemaGeneratorPlugin", () => {
     });
   });
 
+  describe("emission ordering", () => {
+    let plugin: ZodSchemaGeneratorPlugin;
+    let context: TransformerContext;
+
+    beforeAll(() => {
+      context = new TransformerContext();
+      plugin = new ZodSchemaGeneratorPlugin(context, { emitOutput: true });
+      context.registerPlugin(plugin);
+    });
+
+    it("emits a referenced enum before the object that references it", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            role: Role!
+          }
+          enum Role {
+            ADMIN
+            USER
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User", "Role"]
+      );
+
+      const roleIdx = output.indexOf("export const RoleSchema");
+      const userIdx = output.indexOf("export const UserSchema");
+      expect(roleIdx).toBeGreaterThan(-1);
+      expect(userIdx).toBeGreaterThan(-1);
+      expect(roleIdx).toBeLessThan(userIdx);
+    });
+
+    it("emits a referenced object before the object that references it", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          type User {
+            address: Address!
+          }
+          type Address {
+            street: String!
+          }
+          type Query {
+            me: User
+          }
+        `,
+        ["User", "Address"]
+      );
+
+      const addressIdx = output.indexOf("export const AddressSchema");
+      const userIdx = output.indexOf("export const UserSchema");
+      expect(addressIdx).toBeLessThan(userIdx);
+    });
+
+    it("emits union member schemas before the union itself", () => {
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          union Payload = Foo | Bar
+          type Foo {
+            a: String!
+          }
+          type Bar {
+            b: String!
+          }
+          type Query {
+            payload: Payload
+          }
+        `,
+        ["Payload", "Foo", "Bar"]
+      );
+
+      const fooIdx = output.indexOf("export const FooSchema");
+      const barIdx = output.indexOf("export const BarSchema");
+      const payloadIdx = output.indexOf("export const PayloadSchema");
+      expect(fooIdx).toBeLessThan(payloadIdx);
+      expect(barIdx).toBeLessThan(payloadIdx);
+    });
+
+    it("wraps cyclic union members in z.lazy", () => {
+      // Tree has a self-cycle: Tree's `children` references Tree directly.
+      // (Direct object self-refs aren't expected to come up often, but a real
+      // cycle through a union does — Payload references PayloadA which
+      // references Payload back.)
+      const output = generateSchemas(
+        plugin,
+        context,
+        /* GraphQL */ `
+          union Payload = PayloadA | PayloadB
+          type PayloadA {
+            child: Payload
+          }
+          type PayloadB {
+            label: String!
+          }
+          type Query {
+            payload: Payload
+          }
+        `,
+        ["Payload", "PayloadA", "PayloadB"]
+      );
+
+      // PayloadA → Payload → PayloadA forms an SCC, so refs within the SCC are lazy.
+      // PayloadB has no inbound cycle, so it stays a plain identifier.
+      expect(output).toMatch(/z\.lazy\(\(\)\s*=>\s*PayloadSchema\)/);
+      expect(output).toMatch(/z\.lazy\(\(\)\s*=>\s*PayloadASchema\)/);
+      expect(output).not.toMatch(/z\.lazy\(\(\)\s*=>\s*PayloadBSchema\)/);
+    });
+  });
+
   describe("output structure", () => {
     let plugin: ZodSchemaGeneratorPlugin;
     let context: TransformerContext;

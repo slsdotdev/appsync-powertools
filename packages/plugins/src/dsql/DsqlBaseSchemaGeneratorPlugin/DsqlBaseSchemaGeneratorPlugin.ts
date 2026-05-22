@@ -292,7 +292,7 @@ export class DsqlBaseSchemaGeneratorPlugin extends TransformerPluginBase {
     const relations: ts.PropertyAssignment[] = [];
 
     for (const field of node.fields ?? []) {
-      if (!isRelationField(field)) {
+      if (isClientOnly(field) || !isRelationField(field)) {
         continue;
       }
 
