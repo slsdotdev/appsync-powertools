@@ -54,7 +54,7 @@
     "@gqlbase/shared": "^0.1.9",
     "cac": "^7.0.0",
     "chokidar": "^5.0.0",
-    "tinyglobby": "^0.2.15"
+    "tinyglobby": "^0.2.16"
   },
   "devDependencies": {
     "@gqlbase/plugins": "^0.1.9"

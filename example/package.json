@@ -12,16 +12,16 @@
   },
   "dependencies": {
     "@aws/aurora-dsql-node-postgres-connector": "^0.1.8",
-    "@middy-appsync/graphql": "^0.1.1",
+    "@middy-appsync/graphql": "^0.1.4",
     "drizzle-orm": "^0.45.2",
     "dsqlbase": "^0.1.4",
     "pg": "^8.20.0",
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@gqlbase/cli": "^0.1.9",
     "@types/aws-lambda": "^8.10.161",
     "@types/pg": "^8.20.0",
-    "tsx": "^4.21.0"
+    "tsx": "^4.22.1"
   }
 }
