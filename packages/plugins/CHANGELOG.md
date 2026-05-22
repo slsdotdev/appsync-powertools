@@ -1,5 +1,13 @@
 # @gqlbase/plugins
 
+## 0.1.10
+
+### Patch Changes
+
+- 09b33a7: Fix zod schemas dependency refs
+  - @gqlbase/core@0.1.10
+  - @gqlbase/shared@0.1.10
+
 ## 0.1.9
 
 ### Patch Changes
