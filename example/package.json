@@ -19,7 +19,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@gqlbase/cli": "^0.1.9",
+    "@gqlbase/cli": "^0.1.10",
     "@types/aws-lambda": "^8.10.161",
     "@types/pg": "^8.20.0",
     "tsx": "^4.22.1"
