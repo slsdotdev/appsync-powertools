@@ -1,28 +1,12 @@
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { TransformerContext } from "@gqlbase/core";
-import {
-  DirectiveDefinitionNode,
-  DocumentNode,
-  EnumNode,
-  InputObjectNode,
-  InterfaceNode,
-  ObjectNode,
-  ScalarNode,
-  UnionNode,
-} from "@gqlbase/core/definition";
+import { DocumentNode } from "@gqlbase/core/definition";
 import { AppSyncSchemaGeneratorPlugin } from "./AppSyncSchemaGeneratorPlugin.js";
 import { ScalarsPlugin } from "../../base/index.js";
 import { AppSyncUtilsPlugin } from "../AppSyncUtilsPlugin/AppSyncUtilsPlugin.js";
 
-const generateSchema = (plugin: AppSyncSchemaGeneratorPlugin, context: TransformerContext) => {
+const generateSchema = (plugin: AppSyncSchemaGeneratorPlugin) => {
   plugin.before();
-
-  for (const definition of context.document.definitions.values()) {
-    if (plugin.match(definition)) {
-      plugin.generate(definition);
-    }
-  }
-
   return plugin.output();
 };
 
@@ -38,158 +22,6 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
 
   afterEach(() => {
     context.finishWork();
-  });
-
-  describe("match", () => {
-    it("excludes scalar definitions", () => {
-      context.startWork(
-        DocumentNode.fromSource(/* GraphQL */ `
-          scalar Decimal
-
-          type Query {
-            amount: Decimal
-          }
-        `)
-      );
-
-      const scalar = context.document.getNode("Decimal") as ScalarNode;
-      expect(scalar).toBeInstanceOf(ScalarNode);
-      expect(plugin.match(scalar)).toBe(false);
-    });
-
-    it("excludes directive definitions", () => {
-      context.startWork(
-        DocumentNode.fromSource(/* GraphQL */ `
-          directive @auth(requires: String!) on FIELD_DEFINITION
-
-          type Query {
-            me: String
-          }
-        `)
-      );
-
-      const directive = context.document.getNode("auth") as DirectiveDefinitionNode;
-      expect(directive).toBeInstanceOf(DirectiveDefinitionNode);
-      expect(plugin.match(directive)).toBe(false);
-    });
-
-    it("excludes internal definitions", () => {
-      context.startWork(
-        DocumentNode.fromSource(/* GraphQL */ `
-          directive @gqlbase_internal on OBJECT
-
-          type InternalType @gqlbase_internal {
-            id: ID!
-          }
-
-          type Query {
-            me: String
-          }
-        `)
-      );
-
-      const internal = context.document.getNode("InternalType") as ObjectNode;
-      expect(plugin.match(internal)).toBe(false);
-    });
-
-    it("includes object types", () => {
-      context.startWork(
-        DocumentNode.fromSource(/* GraphQL */ `
-          type User {
-            id: ID!
-            name: String!
-          }
-          type Query {
-            me: User
-          }
-        `)
-      );
-
-      const user = context.document.getNode("User") as ObjectNode;
-
-      expect(user).toBeInstanceOf(ObjectNode);
-      expect(plugin.match(user)).toBe(true);
-    });
-
-    it("includes enum types", () => {
-      context.startWork(
-        DocumentNode.fromSource(/* GraphQL */ `
-          enum Role {
-            ADMIN
-            USER
-          }
-          type Query {
-            role: Role
-          }
-        `)
-      );
-
-      const role = context.document.getNode("Role") as EnumNode;
-
-      expect(role).toBeInstanceOf(EnumNode);
-      expect(plugin.match(role)).toBe(true);
-    });
-
-    it("includes input types", () => {
-      context.startWork(
-        DocumentNode.fromSource(/* GraphQL */ `
-          input CreateUserInput {
-            name: String!
-          }
-          type Query {
-            me: String
-          }
-        `)
-      );
-
-      const input = context.document.getNode("CreateUserInput") as InputObjectNode;
-
-      expect(input).toBeInstanceOf(InputObjectNode);
-      expect(plugin.match(input)).toBe(true);
-    });
-
-    it("includes interface types", () => {
-      context.startWork(
-        DocumentNode.fromSource(/* GraphQL */ `
-          interface Node {
-            id: ID!
-          }
-          type Query {
-            node: Node
-          }
-        `)
-      );
-
-      const node = context.document.getNode("Node") as InterfaceNode;
-
-      expect(node).toBeInstanceOf(InterfaceNode);
-      expect(plugin.match(node)).toBe(true);
-    });
-
-    it("includes union types", () => {
-      context.startWork(
-        DocumentNode.fromSource(/* GraphQL */ `
-          type Cat {
-            name: String!
-          }
-
-          type Dog {
-            name: String!
-          }
-
-          union Pet = Cat | Dog
-
-          type Query {
-            pet: Pet
-          }
-        `)
-      );
-
-      const pet = context.document.getNode("Pet") as UnionNode;
-
-      expect(pet).toBeInstanceOf(UnionNode);
-      expect(plugin.match(pet)).toBe(true);
-    });
   });
 
   describe("scalar replacement", () => {
@@ -224,7 +56,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("id: ID!");
       expect(out?.appsync?.schema).toContain("name: String!");
@@ -255,7 +87,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("AWSDateTime");
       expect(out?.appsync?.schema).not.toContain("createdAt: DateTime");
@@ -275,7 +107,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("[AWSDateTime!]!");
       expect(out?.appsync?.schema).toContain("lastSeen: AWSDateTime!");
@@ -296,7 +128,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("start: AWSDateTime!");
       expect(out?.appsync?.schema).toContain("end: AWSDateTime!");
@@ -323,7 +155,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(customPlugin, customContext);
+      const out = generateSchema(customPlugin);
 
       expect(out?.appsync?.schema).toContain("AWSTimestamp");
       expect(out?.appsync?.schema).not.toContain("Decimal");
@@ -348,7 +180,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("type User");
       expect(out?.appsync?.schema).not.toContain("@model");
@@ -373,7 +205,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("name: String!");
       expect(out?.appsync?.schema).toContain("createdAt: String!");
@@ -400,7 +232,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("@aws_api_key");
       expect(out?.appsync?.schema).toContain("@aws_iam");
@@ -427,7 +259,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).not.toContain("directive @aws_subscribe");
       expect(out?.appsync?.schema).toContain("@aws_subscribe");
@@ -450,7 +282,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("interface Timestamped");
       expect(out?.appsync?.schema).not.toContain("@cacheControl");
@@ -472,7 +304,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("name: String!");
       expect(out?.appsync?.schema).toContain("email: String!");
@@ -505,7 +337,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("type User");
       expect(out?.appsync?.schema).toContain("id: ID!");
@@ -528,7 +360,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("enum Role");
       expect(out?.appsync?.schema).toContain("ADMIN");
@@ -555,7 +387,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("union Pet = Cat | Dog");
     });
@@ -578,7 +410,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("interface Node");
       expect(out?.appsync?.schema).toContain("type User implements Node");
@@ -598,7 +430,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("input CreateUserInput");
       expect(out?.appsync?.schema).toContain("name: String!");
@@ -623,7 +455,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("type Query");
       expect(out?.appsync?.schema).toContain("me: User");
@@ -647,7 +479,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("The unique identifier");
       expect(out?.appsync?.schema).toContain("The user display name");
@@ -666,7 +498,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("A platform user");
     });
@@ -701,7 +533,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("id: ID!");
       expect(out?.appsync?.schema).toContain("email: AWSEmail!");
@@ -740,7 +572,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("interface Timestamped");
       expect(out?.appsync?.schema).toContain("type User implements Timestamped");
@@ -770,7 +602,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain(
         "union NotificationPayload = OrderPayload | ReviewPayload"
@@ -799,7 +631,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("email: AWSEmail!");
       expect(out?.appsync?.schema).toContain("birthDate: AWSDateTime");
@@ -821,7 +653,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("memberIds: [ID!]!");
       expect(out?.appsync?.schema).toContain("optionalIds: [ID]");
@@ -846,7 +678,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).toContain("type User");
       expect(out?.appsync?.schema).toContain("@aws_api_key");
@@ -883,7 +715,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(typeof out?.appsync?.schema).toBe("string");
       expect(out?.appsync?.schema.length).toBeGreaterThan(0);
@@ -916,7 +748,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       // The output should be parseable as valid GraphQL
       expect(() => DocumentNode.fromSource(out?.appsync?.schema ?? "")).not.toThrow();
@@ -940,7 +772,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       expect(out?.appsync?.schema).not.toMatch(/^scalar /m);
       expect(out?.appsync?.schema).not.toMatch(/^directive /m);
@@ -958,7 +790,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      generateSchema(plugin, context);
+      generateSchema(plugin);
       context.finishWork();
 
       context.startWork(
@@ -972,7 +804,7 @@ describe("AppSyncSchemaGeneratorPlugin", () => {
         `)
       );
 
-      const out = generateSchema(plugin, context);
+      const out = generateSchema(plugin);
 
       // Second run should not contain types from first run
       expect(out?.appsync?.schema).not.toContain("type User");

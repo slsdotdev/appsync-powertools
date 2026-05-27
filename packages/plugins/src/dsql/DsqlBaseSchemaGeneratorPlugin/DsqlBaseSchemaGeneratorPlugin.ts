@@ -28,6 +28,7 @@ import {
   mergeOptions,
   resolveScalarDataType,
   resolveTypeHintDataType,
+  ScalarConfig,
 } from "./DsqlBaseSchemaGeneratorPlugin.utils.js";
 import { isBuildInScalar } from "@gqlbase/shared/definition";
 import { isPrimaryKeyField } from "../../base/ModelPlugin/index.js";
@@ -112,7 +113,7 @@ export class DsqlBaseSchemaGeneratorPlugin extends TransformerPluginBase {
     this._enums.push(this._exportExp(enumVarName, initializer));
   }
 
-  private _resolveScalarDataType(typeName: string, columnName: string): ts.Expression {
+  private _resolveScalarColumnType(typeName: string): ScalarConfig {
     let columnType = resolveScalarDataType(typeName, this._options?.scalarMap);
 
     if (!columnType) {
@@ -131,14 +132,20 @@ export class DsqlBaseSchemaGeneratorPlugin extends TransformerPluginBase {
       );
     }
 
-    this._imports.add(columnType.type);
+    return columnType;
+  }
+
+  private _resolveScalarDataType(typeName: string, columnName: string): ts.Expression {
+    const columnType = this._resolveScalarColumnType(typeName);
+
+    this._imports.add(columnType.dataType);
     const args: ts.Expression[] = [ts.factory.createStringLiteral(columnName)];
 
     if (columnType.options) {
       args.push(jsonToObjectAst(columnType.options as JsonValue));
     }
 
-    return this._callExp(columnType.type, args);
+    return this._callExp(columnType.dataType, args);
   }
 
   private _applyColumnConstraints(column: ts.Expression, field: FieldNode): ts.Expression {
@@ -148,10 +155,6 @@ export class DsqlBaseSchemaGeneratorPlugin extends TransformerPluginBase {
       expression = this._chainCallExp(expression, "primaryKey");
       expression = this._chainCallExp(expression, "defaultRandom");
       return expression;
-    }
-
-    if (isListTypeNode(field.type)) {
-      // TBD - how to handle constraints on list types?
     }
 
     if (!isSemanticNullable(field)) {
@@ -164,13 +167,60 @@ export class DsqlBaseSchemaGeneratorPlugin extends TransformerPluginBase {
   private _generateColumn(field: FieldNode): ts.Expression {
     const fieldTypeName = field.type.getTypeName();
     const columnName = snakeCase(field.name);
+    const typeDef = this.context.document.getNode(fieldTypeName);
+
+    if (isListTypeNode(field.type)) {
+      this._imports.add("json");
+
+      if (isBuildInScalar(fieldTypeName) || (typeDef && isScalarNode(typeDef))) {
+        const columnType = this._resolveScalarColumnType(fieldTypeName);
+
+        const column = this._callExp("json", [ts.factory.createStringLiteral(columnName)]);
+        const valueType = ts.factory.createArrayTypeNode(
+          ts.factory.createTypeReferenceNode(columnType.type)
+        );
+
+        return this._chainCallExp(
+          this._applyColumnConstraints(column, field),
+          "$type",
+          [],
+          [valueType]
+        );
+      }
+
+      if (!typeDef) {
+        throw new TransformerPluginExecutionError(
+          this.name,
+          `Type "${fieldTypeName}" for field "${field.name}" not found in document.`
+        );
+      }
+
+      this._typeImports.add(fieldTypeName);
+
+      const column = this._callExp("json", [ts.factory.createStringLiteral(columnName)]);
+      const columnType = ts.factory.createArrayTypeNode(
+        ts.factory.createTypeReferenceNode(fieldTypeName)
+      );
+
+      return this._chainCallExp(
+        this._applyColumnConstraints(column, field),
+        "$type",
+        [],
+        [columnType]
+      );
+    }
 
     if (isBuildInScalar(fieldTypeName)) {
       const column = this._resolveScalarDataType(fieldTypeName, columnName);
       return this._applyColumnConstraints(column, field);
     }
 
-    const typeDef = this.context.document.getNodeOrThrow(fieldTypeName);
+    if (!typeDef) {
+      throw new TransformerPluginExecutionError(
+        this.name,
+        `Type "${fieldTypeName}" for field "${field.name}" not found in document.`
+      );
+    }
 
     if (isScalarNode(typeDef)) {
       const column = this._resolveScalarDataType(fieldTypeName, columnName);

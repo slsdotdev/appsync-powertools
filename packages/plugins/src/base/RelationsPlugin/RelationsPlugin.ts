@@ -31,7 +31,7 @@ import {
   RelationTarget,
   isBelongsToRelationship,
 } from "./RelationsPlugin.utils.js";
-import { UtilityDirective } from "../UtilitiesPlugin/index.js";
+import { isClientOnly, UtilityDirective } from "../UtilitiesPlugin/index.js";
 import { isSemanticNullable } from "../RfcFeaturesPlugin/RfcFeaturesPlugin.utils.js";
 
 /**
@@ -193,7 +193,10 @@ export class RelationsPlugin implements ITransformerPlugin {
         FieldNode.create(
           key,
           undefined,
-          [DirectiveNode.create(UtilityDirective.WRITE_ONLY)],
+          [
+            DirectiveNode.create(UtilityDirective.SERVER_ONLY),
+            DirectiveNode.create(UtilityDirective.WRITE_ONLY),
+          ],
           isNullable
             ? NamedTypeNode.create(typeName)
             : NonNullTypeNode.create(NamedTypeNode.create(typeName))
@@ -285,7 +288,7 @@ export class RelationsPlugin implements ITransformerPlugin {
     for (const field of definition.fields ?? []) {
       const relation = this._getFieldRelation(definition, field);
 
-      if (!relation) {
+      if (!relation || isClientOnly(field)) {
         continue;
       }
 

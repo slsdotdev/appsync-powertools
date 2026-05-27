@@ -152,12 +152,9 @@ export class AppSyncSchemaGeneratorPlugin extends TransformerPluginBase {
   private _addInterface(node: InterfaceNode) {
     const fields = this._getFields(node);
     const directives = this._getDirectives(node);
-    const interfaces = node.interfaces
-      ? node.interfaces.map((iface) => NamedTypeNode.create(iface.name))
-      : undefined;
 
     this.document.addNode(
-      InterfaceNode.create(node.name, undefined, directives, fields, interfaces)
+      InterfaceNode.create(node.name, undefined, directives, fields, undefined)
     );
   }
 
@@ -182,17 +179,7 @@ export class AppSyncSchemaGeneratorPlugin extends TransformerPluginBase {
     this.document.addNode(InputObjectNode.create(node.name, undefined, directives, fields));
   }
 
-  public before() {
-    this.document = DocumentNode.create();
-  }
-
-  public match(definition: DefinitionNode): boolean {
-    return (
-      !isScalarNode(definition) && !isDirectiveDefinitionNode(definition) && !isInternal(definition)
-    );
-  }
-
-  public generate(definition: DefinitionNode) {
+  private _generate(definition: DefinitionNode) {
     if (definition instanceof InterfaceNode) {
       return this._addInterface(definition);
     }
@@ -214,7 +201,23 @@ export class AppSyncSchemaGeneratorPlugin extends TransformerPluginBase {
     }
   }
 
+  public before() {
+    this.document = DocumentNode.create();
+  }
+
+  public match(): boolean {
+    return false;
+  }
+
   public output() {
+    for (const node of this.context.document.definitions.values()) {
+      if (isScalarNode(node) || isDirectiveDefinitionNode(node) || isInternal(node)) {
+        continue;
+      }
+
+      this._generate(node);
+    }
+
     const schema = this.document.print();
 
     this.context.files.push({

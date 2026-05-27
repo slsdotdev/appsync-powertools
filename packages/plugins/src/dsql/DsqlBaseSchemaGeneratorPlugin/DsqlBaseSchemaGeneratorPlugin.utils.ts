@@ -4,12 +4,13 @@ import { TypeHintValueType } from "@gqlbase/core/plugins";
 
 export interface ScalarConfig {
   type: string;
+  dataType: string;
   options?: Record<string, unknown>;
 }
 
 export interface DsqlBaseSchemaGeneratorPluginOptions {
   emitOutput?: boolean;
-  scalarMap?: Record<string, string | ScalarConfig>;
+  scalarMap?: Record<string, ScalarConfig>;
 }
 
 export const DEFAULT_OPTIONS: Required<DsqlBaseSchemaGeneratorPluginOptions> = {
@@ -26,44 +27,38 @@ export const mergeOptions = (options: DsqlBaseSchemaGeneratorPluginOptions = {})
 };
 
 export const SCALAR_TYPE_MAP: Record<BuildInScalar | BaseScalarName, ScalarConfig> = {
-  ID: { type: "uuid" },
-  String: { type: "text" },
-  Int: { type: "int" },
-  Float: { type: "real" },
-  Boolean: { type: "bool" },
-  UUID: { type: "uuid" },
-  DateTime: { type: "timestamp", options: { mode: "iso" } },
-  Date: { type: "date", options: { mode: "iso" } },
-  Time: { type: "time", options: { mode: "iso" } },
-  Timestamp: { type: "timestamp" },
-  URL: { type: "text" },
-  EmailAddress: { type: "text" },
-  PhoneNumber: { type: "text" },
-  IPAddress: { type: "text" },
-  JSON: { type: "json" },
+  ID: { type: "string", dataType: "uuid" },
+  String: { type: "string", dataType: "text" },
+  Int: { type: "number", dataType: "int" },
+  Float: { type: "number", dataType: "real" },
+  Boolean: { type: "boolean", dataType: "bool" },
+  UUID: { type: "string", dataType: "uuid" },
+  DateTime: { type: "string", dataType: "timestamp", options: { mode: "iso" } },
+  Date: { type: "string", dataType: "date", options: { mode: "iso" } },
+  Time: { type: "string", dataType: "time", options: { mode: "iso" } },
+  Timestamp: { type: "string", dataType: "timestamp" },
+  URL: { type: "string", dataType: "text" },
+  EmailAddress: { type: "string", dataType: "text" },
+  PhoneNumber: { type: "string", dataType: "text" },
+  IPAddress: { type: "string", dataType: "text" },
+  JSON: { type: "string", dataType: "json" },
 };
 
 export const TYPE_HINT_TYPE_MAP: Record<TypeHintValueType, ScalarConfig> = {
-  id: { type: "uuid" },
-  string: { type: "text" },
-  number: { type: "real" },
-  boolean: { type: "bool" },
-  object: { type: "json" },
-  unknown: { type: "text" },
+  id: { type: "string", dataType: "uuid" },
+  string: { type: "string", dataType: "text" },
+  number: { type: "number", dataType: "real" },
+  boolean: { type: "boolean", dataType: "bool" },
+  object: { type: "string", dataType: "json" },
+  unknown: { type: "string", dataType: "text" },
 };
 
 export const resolveScalarDataType = (
   typeName: string,
-  config?: Record<string, string | ScalarConfig>
+  config?: Record<string, ScalarConfig>
 ): ScalarConfig | null => {
   if (config?.[typeName]) {
-    const mapping = config[typeName];
-
-    if (typeof mapping === "string") {
-      return { type: mapping };
-    }
-
-    return mapping;
+    return config[typeName];
   }
 
   if (isBuildInScalar(typeName) || isBaseScalar(typeName)) {

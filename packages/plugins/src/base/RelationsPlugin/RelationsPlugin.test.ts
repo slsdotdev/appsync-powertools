@@ -21,6 +21,10 @@ const document = DocumentNode.fromSource(/* GraphQL */ `
     id: ID!
     name: String!
   }
+
+  type Viewer {
+    user: User @belongsTo @clientOnly
+  }
 `);
 
 describe("RelationsPlugin", () => {
@@ -94,5 +98,15 @@ describe("RelationsPlugin", () => {
       expect(context.document.getNode("PostConnection")).toBeDefined();
       expect(context.document.getNode("TagConnection")).toBeDefined();
     });
+  });
+
+  it("does not modify client-only fields", () => {
+    const viewerNode = context.document.getNodeOrThrow("Viewer") as ObjectNode;
+
+    plugin.normalize(viewerNode);
+    plugin.execute(viewerNode);
+
+    expect(viewerNode.getField("user")?.type.getTypeName()).toBe("User");
+    expect(viewerNode.hasField("userId")).toBeFalsy();
   });
 });
