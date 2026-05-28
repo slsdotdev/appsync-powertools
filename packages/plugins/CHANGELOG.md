@@ -1,5 +1,13 @@
 # @gqlbase/plugins
 
+## 0.1.11
+
+### Patch Changes
+
+- 66f689e: Plugin fixes
+  - @gqlbase/core@0.1.11
+  - @gqlbase/shared@0.1.11
+
 ## 0.1.10
 
 ### Patch Changes
