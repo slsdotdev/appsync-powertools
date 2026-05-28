@@ -211,7 +211,9 @@ export class MiddyAppSyncGraphQLPlugin extends TypesGeneratorBase {
   }
 
   private _createFieldSource(parent: ObjectNode) {
-    this.typeImports.add(parent.name);
+    if (!isOperationNode(parent)) {
+      this.typeImports.add(parent.name);
+    }
 
     return ts.factory.createPropertySignature(
       undefined,

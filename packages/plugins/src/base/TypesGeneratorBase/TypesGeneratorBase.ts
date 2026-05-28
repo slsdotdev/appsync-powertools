@@ -122,18 +122,15 @@ export abstract class TypesGeneratorBase extends TransformerPluginBase {
     const members: ts.TypeElement[] = [];
 
     for (const field of definition.fields ?? []) {
-      if (isRelationField(field)) {
-        continue;
-      }
-
-      const questionToken = isSemanticNullable(field)
-        ? ts.factory.createToken(ts.SyntaxKind.QuestionToken)
-        : undefined;
+      const questionToken =
+        isSemanticNullable(field) || isRelationField(field)
+          ? ts.factory.createToken(ts.SyntaxKind.QuestionToken)
+          : undefined;
 
       const typeNode = this._createValueTypeReference(field, field.type);
 
       const propertySignature = ts.factory.createPropertySignature(
-        [ts.factory.createModifier(ts.SyntaxKind.ReadonlyKeyword)],
+        undefined,
         ts.factory.createIdentifier(field.name),
         questionToken,
         typeNode
@@ -225,7 +222,9 @@ export abstract class TypesGeneratorBase extends TransformerPluginBase {
     }
 
     const refs = definition.types.map((type) =>
-      ts.factory.createTypeReferenceNode(ts.factory.createIdentifier(type.name))
+      ts.factory.createTypeReferenceNode(ts.factory.createIdentifier("RequiredTypename"), [
+        ts.factory.createTypeReferenceNode(ts.factory.createIdentifier(type.name), undefined),
+      ])
     );
 
     const unionType = ts.factory.createTypeAliasDeclaration(

@@ -59,17 +59,14 @@ export class ModelTypesGeneratorPlugin extends TypesGeneratorBase {
     const members: ts.TypeElement[] = [];
 
     for (const field of definition.fields ?? []) {
-      if (
-        isInternal(field) ||
-        isRelationField(field) ||
-        (isWriteOnly(field) && !isServerOnly(field))
-      ) {
+      if (isInternal(field) || (isWriteOnly(field) && !isServerOnly(field))) {
         continue;
       }
 
-      const questionToken = isSemanticNullable(field)
-        ? ts.factory.createToken(ts.SyntaxKind.QuestionToken)
-        : undefined;
+      const questionToken =
+        isSemanticNullable(field) || isRelationField(field)
+          ? ts.factory.createToken(ts.SyntaxKind.QuestionToken)
+          : undefined;
 
       const typeNode = this._createValueTypeReference(field, field.type);
 
@@ -91,6 +88,17 @@ export class ModelTypesGeneratorPlugin extends TypesGeneratorBase {
       members.push(propertySignature);
     }
 
+    if (isObjectNode(definition)) {
+      members.push(
+        ts.factory.createPropertySignature(
+          undefined,
+          ts.factory.createIdentifier("__typename"),
+          ts.factory.createToken(ts.SyntaxKind.QuestionToken),
+          ts.factory.createLiteralTypeNode(ts.factory.createStringLiteral(definition.name))
+        )
+      );
+    }
+
     return members;
   }
 
@@ -107,6 +115,36 @@ export class ModelTypesGeneratorPlugin extends TypesGeneratorBase {
         ts.factory.createUnionTypeNode([
           ts.factory.createTypeReferenceNode("T"),
           ts.factory.createLiteralTypeNode(ts.factory.createNull()),
+        ])
+      ),
+      ts.factory.createTypeAliasDeclaration(
+        undefined,
+        ts.factory.createIdentifier("RequiredTypename"),
+        [
+          ts.factory.createTypeParameterDeclaration(
+            undefined,
+            ts.factory.createIdentifier("T"),
+            ts.factory.createTypeLiteralNode([
+              ts.factory.createPropertySignature(
+                undefined,
+                ts.factory.createIdentifier("__typename"),
+                ts.factory.createToken(ts.SyntaxKind.QuestionToken),
+                ts.factory.createKeywordTypeNode(ts.SyntaxKind.StringKeyword)
+              ),
+            ]),
+            undefined
+          ),
+        ],
+        ts.factory.createIntersectionTypeNode([
+          ts.factory.createTypeReferenceNode(ts.factory.createIdentifier("T"), undefined),
+          ts.factory.createTypeLiteralNode([
+            ts.factory.createPropertySignature(
+              undefined,
+              ts.factory.createIdentifier("__typename"),
+              undefined,
+              ts.factory.createKeywordTypeNode(ts.SyntaxKind.StringKeyword)
+            ),
+          ]),
         ])
       )
     );

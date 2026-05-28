@@ -153,7 +153,7 @@ describe("ModelTypesGeneratorPlugin", () => {
         context,
         /* GraphQL */ `
           type User {
-            name: String @semanticNonNull
+            username: String @semanticNonNull
           }
           type Query {
             me: User
@@ -161,8 +161,8 @@ describe("ModelTypesGeneratorPlugin", () => {
         `
       );
 
-      expect(output).toContain("name: string");
-      expect(output).not.toMatch(/name\?/);
+      expect(output).toContain("username: string");
+      expect(output).not.toMatch(/username\?/);
     });
 
     it("wraps list items with Maybe when only list level is @semanticNonNull", () => {
